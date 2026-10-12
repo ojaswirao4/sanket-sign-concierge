@@ -2,6 +2,7 @@
   "name": "sanket-sign-concierge",
   "version": "2.0.0",
   "private": true,
+  "author": "Ojaswi Rao (https://github.com/ojaswirao4)",
   "description": "Sanket: a hotel front-desk concierge with Meera, a 3D signing avatar, plus speech, text and webcam sign-language input.",
   "type": "module",
   "scripts": {

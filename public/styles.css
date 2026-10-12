@@ -248,7 +248,8 @@ svg { width: 18px; height: 18px; fill: currentColor; flex: none; }
 .settings label.row input { margin-top: 3px; accent-color: var(--teal); }
 .settings select { height: 40px; border-radius: 10px; background: #fff; color: var(--ink); border: 1px solid var(--line2); padding: 0 10px; font: inherit; }
 .settings .note { font-size: 12.5px; color: var(--muted); line-height: 1.55; border-left: 3px solid var(--saffron); padding-left: 10px; }
-.settings menu { display: flex; justify-content: flex-end; padding: 0; margin: 12px 0 0; }
+.settings menu { display: flex; justify-content: flex-end; align-items: center; gap: 12px; padding: 0; margin: 12px 0 0; }
+.settings .credit { margin-right: auto; font-size: 11px; color: var(--muted); opacity: 0.7; letter-spacing: 0.02em; }
 
 /* ---------- responsive ---------- */
 @media (max-width: 1180px) {

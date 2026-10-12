@@ -2,6 +2,8 @@
 
 **Sanket** (संकेत, "sign") is a hotel front-desk assistant for Deaf and hard-of-hearing guests, shown here at the fictional **Kesar Palace, Jaipur**. **Meera**, a 3D receptionist built for this project, answers in sign language with captions. Guests can type, speak, sign to the webcam, or tap a sign board.
 
+By [Ojaswi Rao](https://github.com/ojaswirao4).
+
 ## Run
 
 ```bash
@@ -110,6 +112,6 @@ Add a new sign: add an entry to `SIGNS` in `signs.js` (keyframes of palm positio
 
 ## License
 
-The project code is [MIT](LICENSE). Third-party parts keep their own licences (details in [LICENSE](LICENSE)):
+The project code is [MIT](LICENSE), © 2026 Ojaswi Rao. Third-party parts keep their own licences (details in [LICENSE](LICENSE)):
 - `public/signs/wlasl/`: derived from WLASL, **C-UDA, non-commercial use only**
 - `public/models/aria/`: Microsoft Rocketbox, MIT
