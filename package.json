@@ -1,0 +1,14 @@
+{
+  "name": "sanket-sign-concierge",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Sanket: a hotel front-desk concierge with Meera, a 3D signing avatar, plus speech, text and webcam sign-language input.",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node tests/e2e.mjs"
+  },
+  "optionalDependencies": {
+    "@anthropic-ai/sdk": "latest"
+  }
+}

@@ -1,0 +1,41 @@
+MIT License
+
+Copyright (c) 2026 ojaswirao4
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+-------------------------------------------------------------------------------
+Third-party content (NOT covered by the MIT licence above)
+-------------------------------------------------------------------------------
+
+public/signs/wlasl/
+  Sign keyframes derived from the WLASL dataset (Li et al., "Word-level Deep
+  Sign Language Recognition from Video", WACV 2020,
+  https://github.com/dxli94/WLASL). Licensed under the Computational Use of
+  Data Agreement (C-UDA): academic and computational use only, NO COMMERCIAL
+  USE. The source videos belong to their original publishers and are not
+  included in this repository.
+
+public/models/aria/
+  "Business_Female_01" from the Microsoft Rocketbox avatar library
+  (https://github.com/microsoft/Microsoft-Rocketbox), MIT licence. See
+  public/models/aria/LICENSE.md.
+
+Runtime libraries loaded from CDNs and not included here: three.js (MIT),
+MediaPipe Tasks Vision and models (Apache 2.0), Google Fonts (SIL OFL).

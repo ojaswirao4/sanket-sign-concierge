@@ -1,0 +1,37 @@
+# dependencies
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+
+# browser profiles used by headless test / render scripts
+.chrome-profile*/
+**/.chrome-profile*/
+
+# WLASL pipeline: downloaded videos, MediaPipe models and preview sheets (re-created by the scripts)
+tools/wlasl/data/
+tools/wlasl/models/
+tools/wlasl/preview/
+
+# avatar tooling: source FBX + textures, converter binary, build output and renders
+tools/avatar/src/
+tools/avatar/bin/
+tools/avatar/build/
+tools/avatar/shots/
+tools/avatar/meera/
+
+# test screenshots
+tests/shots/
+
+# local Claude Code settings and secrets
+.claude/settings.local.json
+.env
+.env.*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.log
