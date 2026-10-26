@@ -162,6 +162,213 @@ function lobbyTexture() {
   return t;
 }
 
+// An aircraft cabin at night for the flight venue, softly out of focus: overhead bins, a row of
+// oval windows on each side, cool mood lighting and a dark galley curtain behind her. Like the lobby,
+// it stays dark and low-saturation so her hands remain the brightest thing in the frame.
+function cabinTexture() {
+  const sharp = document.createElement('canvas');
+  sharp.width = 2048;
+  sharp.height = 1024;
+  const g = sharp.getContext('2d'), w = 2048, h = 1024, cx = w / 2;
+  const base = g.createLinearGradient(0, 0, 0, h);
+  base.addColorStop(0, '#171c28');
+  base.addColorStop(0.55, '#202636');
+  base.addColorStop(1, '#151a24');
+  g.fillStyle = base;
+  g.fillRect(0, 0, w, h);
+  // overhead bins with a mood-light strip under them
+  g.fillStyle = '#262d3d';
+  g.fillRect(0, 60, w, 150);
+  g.strokeStyle = 'rgba(0,0,0,0.35)';
+  g.lineWidth = 3;
+  for (let x = 0; x < w; x += 256) {
+    g.beginPath();
+    g.moveTo(x, 60);
+    g.lineTo(x, 210);
+    g.stroke();
+  }
+  const strip = g.createLinearGradient(0, 205, 0, 290);
+  strip.addColorStop(0, 'rgba(120,140,220,0.55)');
+  strip.addColorStop(1, 'rgba(120,140,220,0)');
+  g.fillStyle = strip;
+  g.fillRect(0, 205, w, 85);
+  // oval windows along both side walls, night sky with a few stars
+  for (const side of [-1, 1]) {
+    for (let i = 0; i < 4; i++) {
+      const x = cx + side * (470 + i * 150), y = 470, rx = 34 - i * 2, ry = 52 - i * 3;
+      g.save();
+      g.beginPath();
+      g.ellipse(x, y, rx + 12, ry + 12, 0, 0, Math.PI * 2);
+      g.fillStyle = '#2d3446';
+      g.fill();
+      g.beginPath();
+      g.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2);
+      const sky = g.createLinearGradient(0, y - ry, 0, y + ry);
+      sky.addColorStop(0, '#0c1430');
+      sky.addColorStop(1, '#2a3b6e');
+      g.fillStyle = sky;
+      g.fill();
+      g.clip();
+      g.fillStyle = 'rgba(255,255,255,0.7)';
+      for (let s = 0; s < 4; s++) g.fillRect(x - rx + ((s * 37 + i * 13) % (rx * 2)), y - ry + ((s * 23 + i * 7) % ry), 2, 2);
+      g.restore();
+    }
+  }
+  // galley curtain behind her: dark navy folds with a cool halo
+  g.save();
+  g.beginPath();
+  g.roundRect(cx - 270, 300, 540, h - 300, [40, 40, 0, 0]);
+  g.clip();
+  g.fillStyle = '#121626';
+  g.fillRect(0, 0, w, h);
+  for (let x = cx - 270; x < cx + 270; x += 45) {
+    const fold = g.createLinearGradient(x, 0, x + 45, 0);
+    fold.addColorStop(0, 'rgba(255,255,255,0.0)');
+    fold.addColorStop(0.5, 'rgba(140,160,220,0.07)');
+    fold.addColorStop(1, 'rgba(0,0,0,0.18)');
+    g.fillStyle = fold;
+    g.fillRect(x, 300, 45, h - 300);
+  }
+  const halo = g.createRadialGradient(cx, 470, 60, cx, 500, 420);
+  halo.addColorStop(0, 'rgba(80,95,140,0.3)');
+  halo.addColorStop(1, 'rgba(40,40,70,0)');
+  g.fillStyle = halo;
+  g.fillRect(0, 0, w, h);
+  g.restore();
+  g.strokeStyle = 'rgba(190,200,225,0.25)';
+  g.lineWidth = 5;
+  g.beginPath();
+  g.roundRect(cx - 270, 300, 540, h - 300, [40, 40, 0, 0]);
+  g.stroke();
+  // reading lights and the fasten-seatbelt sign
+  for (const x of [cx - 700, cx - 420, cx + 420, cx + 700]) {
+    const b = g.createRadialGradient(x, 235, 0, x, 235, 70);
+    b.addColorStop(0, 'rgba(255,236,200,0.8)');
+    b.addColorStop(0.2, 'rgba(255,220,170,0.3)');
+    b.addColorStop(1, 'rgba(255,220,170,0)');
+    g.fillStyle = b;
+    g.beginPath();
+    g.arc(x, 235, 70, 0, Math.PI * 2);
+    g.fill();
+  }
+  g.textAlign = 'center';
+  g.fillStyle = 'rgba(226,206,160,0.6)';
+  g.font = '600 40px "Cormorant Garamond", Georgia, serif';
+  g.fillText('K E S A R   A I R', cx - 640, 700);
+  g.font = '400 18px Inter, sans-serif';
+  g.fillText('K R  2 1 4   ·   M U M B A I  →  J A I P U R', cx - 640, 740);
+  const out = document.createElement('canvas');
+  out.width = w;
+  out.height = h;
+  const o = out.getContext('2d');
+  o.filter = 'blur(5px)';
+  o.drawImage(sharp, 0, 0);
+  const t = new THREE.CanvasTexture(out);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 8;
+  return t;
+}
+
+// A calm public help-desk office for the welfare-schemes venue, softly out of focus: a deep teal wall,
+// a lit panel behind her (dark at the centre so her hands stay the brightest thing), a notice board with
+// pinned papers and the desk's signage. Generic on purpose: no government emblem or official branding.
+function officeTexture() {
+  const sharp = document.createElement('canvas');
+  sharp.width = 2048;
+  sharp.height = 1024;
+  const g = sharp.getContext('2d'), w = 2048, h = 1024, cx = w / 2;
+  const base = g.createLinearGradient(0, 0, 0, h);
+  base.addColorStop(0, '#16242a');
+  base.addColorStop(0.55, '#1c2e34');
+  base.addColorStop(1, '#131e22');
+  g.fillStyle = base;
+  g.fillRect(0, 0, w, h);
+  // wall panels
+  g.strokeStyle = 'rgba(0,0,0,0.25)';
+  g.lineWidth = 3;
+  for (let x = 0; x < w; x += 256) {
+    g.beginPath();
+    g.moveTo(x, 0);
+    g.lineTo(x, h);
+    g.stroke();
+  }
+  // recessed panel behind her with a cool halo
+  g.save();
+  g.beginPath();
+  g.roundRect(cx - 280, 170, 560, h - 170, [24, 24, 0, 0]);
+  g.clip();
+  g.fillStyle = '#0f171b';
+  g.fillRect(0, 0, w, h);
+  const halo = g.createRadialGradient(cx, 450, 60, cx, 480, 430);
+  halo.addColorStop(0, 'rgba(80,120,130,0.28)');
+  halo.addColorStop(1, 'rgba(40,60,70,0)');
+  g.fillStyle = halo;
+  g.fillRect(0, 0, w, h);
+  g.restore();
+  g.strokeStyle = 'rgba(222,178,104,0.35)';
+  g.lineWidth = 5;
+  g.beginPath();
+  g.roundRect(cx - 280, 170, 560, h - 170, [24, 24, 0, 0]);
+  g.stroke();
+  // notice board with pinned papers (her right, the viewer's left)
+  const bx = cx - 760, by = 300;
+  g.fillStyle = '#3a2c22';
+  g.fillRect(bx, by, 380, 270);
+  g.fillStyle = '#5b4535';
+  g.fillRect(bx + 12, by + 12, 356, 246);
+  [[30, 25, 90, 120], [140, 40, 100, 80], [255, 22, 90, 130], [60, 160, 120, 80], [200, 140, 140, 100]].forEach(([x, y, pw, ph], i) => {
+    g.fillStyle = i % 2 ? 'rgba(235,228,212,0.75)' : 'rgba(220,232,236,0.7)';
+    g.fillRect(bx + x, by + y, pw, ph);
+    g.fillStyle = 'rgba(217,121,31,0.8)';
+    g.beginPath();
+    g.arc(bx + x + pw / 2, by + y + 6, 5, 0, Math.PI * 2);
+    g.fill();
+  });
+  // ceiling lights
+  for (const [x, y, r] of [[cx - 520, 90, 80], [cx + 520, 90, 80], [cx - 980, 120, 70], [cx + 980, 120, 70]]) {
+    const b = g.createRadialGradient(x, y, 0, x, y, r * 2);
+    b.addColorStop(0, 'rgba(255,240,215,0.7)');
+    b.addColorStop(0.2, 'rgba(255,225,180,0.3)');
+    b.addColorStop(1, 'rgba(255,220,170,0)');
+    g.fillStyle = b;
+    g.beginPath();
+    g.arc(x, y, r * 2, 0, Math.PI * 2);
+    g.fill();
+  }
+  // desk signage (the viewer's right)
+  g.textAlign = 'center';
+  g.fillStyle = 'rgba(236,196,128,0.62)';
+  g.font = '600 44px "Cormorant Garamond", Georgia, serif';
+  g.fillText('S A N K E T   S E V A', cx + 640, 420);
+  g.font = '500 28px "Nirmala UI", "Noto Sans Devanagari", sans-serif';
+  g.fillStyle = 'rgba(236,196,128,0.5)';
+  g.fillText('संकेत सेवा', cx + 640, 466);
+  g.font = '400 18px Inter, sans-serif';
+  g.fillText('W E L F A R E   H E L P   D E S K', cx + 640, 505);
+  const out = document.createElement('canvas');
+  out.width = w;
+  out.height = h;
+  const o = out.getContext('2d');
+  o.filter = 'blur(5px)';
+  o.drawImage(sharp, 0, 0);
+  const t = new THREE.CanvasTexture(out);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 8;
+  return t;
+}
+
+// galley counter laminate for the flight venue
+function laminateTexture() {
+  return canvasTex(512, 128, (g, w, h) => {
+    g.fillStyle = '#2b3240';
+    g.fillRect(0, 0, w, h);
+    for (let i = 0; i < 900; i++) {
+      g.fillStyle = `rgba(255,255,255,${Math.random() * 0.04})`;
+      g.fillRect(Math.random() * w, Math.random() * h, 2, 2);
+    }
+  });
+}
+
 function woodTexture() {
   return canvasTex(1024, 256, (g, w, h) => {
     g.fillStyle = '#3d1f14';
@@ -408,9 +615,13 @@ export class Avatar {
     const back = new THREE.Mesh(new THREE.PlaneGeometry(7, 3.5), new THREE.MeshBasicMaterial({ map: lobbyTexture() }));
     back.position.set(0, 1.55, -1.6);
     scene.add(back);
+    this.backdrop = back;
 
     // desk
     const wood = new THREE.MeshPhysicalMaterial({ map: woodTexture(), roughness: 0.35, clearcoat: 0.6, clearcoatRoughness: 0.25 });
+    // hotel props (bell, diya, urli) are collected here so setVenue() can swap them for galley ones
+    const hotelProps = new THREE.Group();
+    scene.add(hotelProps);
     const gold = new THREE.MeshStandardMaterial({ color: '#d4ae62', metalness: 1, roughness: 0.28 });
     const top = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.05, 0.62), wood);
     top.position.set(0, 0.955, 0.43);
@@ -430,38 +641,96 @@ export class Avatar {
     const bell = new THREE.Mesh(new THREE.SphereGeometry(0.036, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2), gold);
     bell.position.set(0.46, 0.985, 0.5);
     bell.castShadow = true;
-    scene.add(bell);
+    hotelProps.add(bell);
     const bellBase = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.05, 0.01, 32), gold);
     bellBase.position.set(0.46, 0.985, 0.5);
-    scene.add(bellBase);
+    hotelProps.add(bellBase);
     // brass diya with a flame
     const brass2 = gold.clone();
     brass2.side = THREE.DoubleSide;
     const diya = new THREE.Mesh(new THREE.SphereGeometry(0.03, 24, 12, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), brass2);
     diya.scale.set(1, 0.6, 0.75);
     diya.position.set(0.34, 1.0, 0.56);
-    scene.add(diya);
+    hotelProps.add(diya);
     const flame = new THREE.Mesh(new THREE.SphereGeometry(0.008, 16, 12), new THREE.MeshBasicMaterial({ color: '#ffcf6a' }));
     flame.scale.set(0.7, 1.8, 0.7);
     flame.position.set(0.355, 1.018, 0.56);
-    scene.add(flame);
+    hotelProps.add(flame);
     this.flame = flame;
     const glow = new THREE.PointLight('#ffb35c', 0.35, 0.6, 2);
     glow.position.set(0.355, 1.05, 0.58);
-    scene.add(glow);
+    hotelProps.add(glow);
     // marigold urli (her right, the viewer's left)
     const urli = new THREE.Mesh(new THREE.SphereGeometry(0.1, 40, 12, 0, Math.PI * 2, Math.PI * 0.62, Math.PI * 0.38), brass2);
     urli.scale.set(1, 0.5, 1);
     urli.position.set(-0.5, 1.02, 0.48);
-    scene.add(urli);
+    hotelProps.add(urli);
     const petalMats = ['#f39a1d', '#f7b52c', '#e8751a'].map((c) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.7 }));
     for (let i = 0; i < 14; i++) {
       const a = i * 2.4, r = 0.018 + (i % 5) * 0.013;
       const m = new THREE.Mesh(new THREE.SphereGeometry(0.017, 14, 10), petalMats[i % 3]);
       m.scale.y = 0.6;
       m.position.set(-0.5 + Math.cos(a) * r, 0.99, 0.48 + Math.sin(a) * r);
-      scene.add(m);
+      hotelProps.add(m);
     }
+
+    // galley props for the flight venue: a paper cup and a folded saffron blanket
+    const flightProps = new THREE.Group();
+    flightProps.visible = false;
+    scene.add(flightProps);
+    const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.022, 0.08, 32, 1, true), new THREE.MeshStandardMaterial({ color: '#f2efe8', roughness: 0.6, side: THREE.DoubleSide }));
+    cup.position.set(0.38, 1.02, 0.52);
+    cup.castShadow = true;
+    flightProps.add(cup);
+    const band = new THREE.Mesh(new THREE.CylinderGeometry(0.0285, 0.0262, 0.018, 32, 1, true), new THREE.MeshStandardMaterial({ color: '#d9791f', roughness: 0.6 }));
+    band.position.set(0.38, 1.03, 0.52);
+    flightProps.add(band);
+    const fabric = new THREE.MeshStandardMaterial({ color: '#b5541c', roughness: 0.9 });
+    for (let i = 0; i < 3; i++) {
+      const fold = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.02, 0.13), fabric);
+      fold.position.set(-0.36 + i * 0.006, 0.99 + i * 0.021, 0.5);
+      fold.rotation.y = 0.12 - i * 0.05;
+      fold.castShadow = true;
+      flightProps.add(fold);
+    }
+
+    // help-desk props for the welfare-schemes venue: a stack of forms and a folder
+    const officeProps = new THREE.Group();
+    officeProps.visible = false;
+    scene.add(officeProps);
+    const paperMat = new THREE.MeshStandardMaterial({ color: '#efe9dc', roughness: 0.85 });
+    for (let i = 0; i < 4; i++) {
+      const sheet = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.006, 0.21), paperMat);
+      sheet.position.set(0.42 + i * 0.003, 0.984 + i * 0.006, 0.5);
+      sheet.rotation.y = -0.15 + i * 0.04;
+      sheet.castShadow = true;
+      officeProps.add(sheet);
+    }
+    const folder = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.012, 0.23), new THREE.MeshStandardMaterial({ color: '#1d5c66', roughness: 0.7 }));
+    folder.position.set(-0.4, 0.987, 0.5);
+    folder.rotation.y = 0.12;
+    folder.castShadow = true;
+    officeProps.add(folder);
+
+    const textures = { lobby: back.material.map, wood: wood.map };
+    this.setVenue = (venue) => {
+      const flight = venue === 'flight', office = venue === 'schemes';
+      if (flight) {
+        textures.cabin ||= cabinTexture();
+        textures.laminate ||= laminateTexture();
+      }
+      if (office) textures.office ||= officeTexture();
+      back.material.map = flight ? textures.cabin : office ? textures.office : textures.lobby;
+      wood.map = flight ? textures.laminate : textures.wood;
+      back.material.needsUpdate = wood.needsUpdate = true;
+      gold.color.set(flight ? '#c3cad3' : '#d4ae62'); // brass trim becomes brushed aluminium
+      const bg = flight ? '#141824' : office ? '#151a1d' : '#1f1614';
+      scene.background.set(bg);
+      scene.fog.color.set(bg);
+      hotelProps.visible = !flight && !office;
+      flightProps.visible = flight;
+      officeProps.visible = office;
+    };
 
     this.resize = () => {
       const w = this.container.clientWidth || 1, hgt = this.container.clientHeight || 1;
@@ -776,8 +1045,14 @@ export class Avatar {
     return seg;
   }
 
+  // duration of a reach to or from rest: ~0.25 s plus 0.55 s per metre (peak palm speed stays near 2 m/s)
+  _reachTime(to) {
+    return 0.25 + 0.55 * Math.max(this.state.R.p.distanceTo(to.R.p), this.state.L.p.distanceTo(to.L.p));
+  }
+
   _toRest() {
-    const seg = this._segment(this._poseState(REST), 0.6, 0, null);
+    const rest = this._poseState(REST);
+    const seg = this._segment(rest, Math.max(0.6, this._reachTime(rest)), 0, null);
     this.frame = { ...seg, hold: 0, el: 0, isRest: true, face: null };
   }
 
@@ -795,7 +1070,11 @@ export class Avatar {
       this.onGloss && this.onGloss(f.gi, f);
     }
     if (f.letter) this.onGloss && this.onGloss(f.gi, f);
-    const seg = this._segment(this._poseState(f), f.t, f.hold || 0, this.queue[0]);
+    const to = this._poseState(f);
+    // out of rest, a longer reach takes longer (as a person's does): HELLO used to snap from the desk to
+    // the forehead at ~3.5 m/s. Moves within a sign keep their authored timing.
+    const t = !this.frame || this.frame.isRest ? Math.max(f.t, this._reachTime(to)) : f.t;
+    const seg = this._segment(to, t, f.hold || 0, this.queue[0]);
     this.frame = { ...seg, hold: f.hold || 0, el: 0, face: f.face, press: f.press };
     const fc = f.face || {};
     this.faceTarget.brow = fc.brow || 0;
@@ -837,7 +1116,13 @@ export class Avatar {
       ['R', 'L'].forEach((sd) => {
         const a = fr.from[sd], b = fr.to[sd], st = this.state[sd];
         st.p.copy(a.p).multiplyScalar(h00).addScaledVector(fr.m0[sd], h10).addScaledVector(b.p, h01).addScaledVector(fr.m1[sd], h11);
+        // A hand can't turn faster than ~720 deg/s. Video tracking sometimes asks for 1500+ deg/s between
+        // close keyframes (mostly the passive hand), which flips the hand around; turn at the cap instead
+        // and catch up a moment later (the pose itself is unchanged).
+        const prevQ = st.q.clone();
         st.q.slerpQuaternions(a.q, b.q, s);
+        const ang = prevQ.angleTo(st.q), maxAng = (720 * Math.PI / 180) * dt * this.speed;
+        if (ang > maxAng) st.q.copy(prevQ.slerp(st.q, maxAng / ang));
         for (let i = 0; i < 16; i++) st.s[i] = lerp(a.s[i], b.s[i], sh);
       });
       const ph = clamp(fr.el / (fr.t + fr.hold + 0.001), 0, 1);

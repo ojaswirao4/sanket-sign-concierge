@@ -1343,6 +1343,21 @@ export class MeeraAvatar extends Avatar {
       off.L.addScaledVector(dl, t / 2 + 0.001);
       c = solve();
     }
+    // The separation above is recomputed from scratch every frame and picks one of 26 directions, so it
+    // can switch direction or snap on / off between frames: the hands then popped up to 10 cm in a frame.
+    // Let the applied separation glide toward it instead (at most 8 mm per frame per hand).
+    const cur = (this._sep ||= { R: new THREE.Vector3(), L: new THREE.Vector3() });
+    let glided = false;
+    for (const s of ['R', 'L']) {
+      const step = off[s].clone().sub(cur[s]);
+      if (step.length() > 0.008) (step.setLength(0.008)), (glided = true);
+      cur[s].add(step);
+    }
+    if (glided) {
+      off.R.copy(cur.R);
+      off.L.copy(cur.L);
+      solve();
+    }
     this._updateSkins();
   }
 
@@ -1368,7 +1383,7 @@ export class MeeraAvatar extends Avatar {
     // Continuity: while signing, the elbow glides from where it was instead of jumping to whichever
     // position scores best this frame (that jumping made the arms flip around, "breakdance"-like).
     // (resets only when the hand itself jumps, e.g. a pose set directly by a tool)
-    const animating = arm.E !== undefined && arm.lastW !== undefined && Wc.distanceTo(arm.lastW) < 0.06;
+    const animating = arm.E !== undefined && arm.lastW !== undefined && Wc.distanceTo(arm.lastW) < 0.15; // (fast signing moves the wrist up to ~6 cm a frame)
     if (animating && arm.phiTick !== this._tick) {
       arm.Ebase = arm.E.clone();
       arm.phiTick = this._tick;

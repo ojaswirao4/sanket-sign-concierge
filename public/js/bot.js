@@ -24,9 +24,9 @@ const GUESTS = [
 ];
 const FREE_ROOMS = { standard: ['201', '208', '222'], deluxe: ['307', '311', '406'], suite: ['601', '702'] };
 
-const inr = (n) => '₹' + n.toLocaleString('en-IN');
+export const inr = (n) => '₹' + n.toLocaleString('en-IN');
 const G = (s) => s.split(/\s+/).filter(Boolean);
-const R = (text, gloss) => ({ text, gloss: gloss ? G(gloss) : textToGloss(text) });
+export const R = (text, gloss) => ({ text, gloss: gloss ? G(gloss) : textToGloss(text) });
 const floorWord = (n) => ['ground', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th'][n] || n + 'th';
 
 const NUM = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, a: 1, single: 1, couple: 2 };
@@ -182,7 +182,7 @@ const faqTokens = (s) =>
       return FAQ_CANON[w] || w;
     });
 
-function createFaqMatcher(entries) {
+export function createFaqMatcher(entries) {
   const docs = [];
   const df = {};
   // keyword phrases also match with plurals folded ("malls" hits "mall")
@@ -309,6 +309,7 @@ function confirmBooking(ctx) {
     text: `Your booking is confirmed! Booking ID ${id}. Your room number is ${room} on the ${floorWord(floor)} floor. Check-in is from ${HOTEL.checkIn}. Welcome to Kesar Palace!`,
     gloss: ['RESERVE', 'FINISH', 'YOU', 'ROOM', 'NUMBER', room, 'FLOOR', String(floor), 'WELCOME', 'HAPPY'],
     booking: { id, room },
+    card: { title: 'Booking confirmed', fields: [['Booking ID', id], ['Room', room], ['Floor', floorWord(floor).replace(/^\w/, (c) => c.toUpperCase())]] },
   };
 }
 
@@ -422,40 +423,152 @@ const TEMPLATES = [
   [['NO'], 'No.'],
   [['GOOD'], 'Good, thank you.'],
   [['LOVE'], 'I love it, thank you!'],
-  [['WHAT'], 'What?'],
 ];
-const WORD = { ME: 'I', YOU: 'you', 'THANK-YOU': 'thank you', ILY: 'I love you', CAR: 'taxi', CLEAN: 'clean', FINISH: 'finished', RESERVE: 'book' };
 
-export function glossToEnglish(glosses) {
-  const set = new Set(glosses);
-  const nums = glosses.filter((g) => /^\d+$/.test(g));
-  const spelled = glosses.filter((g) => g.startsWith('FS:') && g !== 'FS:WIFI').map((g) => g.slice(3));
-  const parts = [];
-  if (set.has('HELLO')) parts.push('Hello!');
-  let body = null;
-  for (const [need, sent] of TEMPLATES) {
-    if (need.every((n) => set.has(n)) && !(need.length === 1 && need[0] === 'HELLO')) {
-      body = sent;
-      break;
-    }
+// ---------- gloss -> English grammar (used when no template covers everything that was signed) ----------
+// ASL puts question words last, drops "is / am / the", and negates after the verb. This turns that
+// order into a plain English sentence: HELLO BATHROOM WHERE -> "Hello! Where is the bathroom?",
+// ME HUNGRY -> "I am hungry.", YOU SIGN CAN -> "Can you sign?", ME UNDERSTAND NOT -> "I do not understand."
+const WH = new Set(['WHAT', 'WHERE', 'WHEN', 'HOW', 'WHY', 'WHO', 'WHICH']);
+const ADJ = new Set('HUNGRY THIRSTY DEAF HEARING HARD-OF-HEARING TIRED SICK HAPPY SAD COLD HOT LATE EARLY FINE GOOD BAD READY SORRY BUSY FULL SAFE CALM BORED ANGRY LOST SCARED NERVOUS WRONG RIGHT DIRTY CLEAN NEW OLD BIG SMALL'.split(' '));
+const VERB = new Set('EAT DRINK SLEEP GO COME HELP UNDERSTAND SIGN KNOW SEE PAY CALL WAIT FIND LOSE FORGET LIKE LOVE STAY LEAVE ARRIVE BUY RESERVE CHECK OPEN CHANGE TAKE GIVE SEND LEARN READ WRITE WORK MEET USE TRAVEL RENT CANCEL REPEAT SPEAK LISTEN TELL ASK SHOW APPLY GET JOIN DRIVE WALK SIT'.split(' '));
+const NEEDS = new Set(['WANT', 'NEED', 'HAVE']);
+const TIME = { NOW: 'now', TOMORROW: 'tomorrow', YESTERDAY: 'yesterday', TODAY: 'today', MORNING: 'in the morning', NIGHT: 'at night', TONIGHT: 'tonight', LATER: 'later', SOON: 'soon', 'ALL-DAY': 'all day' };
+const SUBJ = { ME: 'I', YOU: 'you', WE: 'we' };
+const NOUN_WORD = { 'FS:WIFI': 'Wi-Fi', BATHROOM: 'bathroom', RESTROOM: 'restroom', RESERVE: 'booking', 'SIGN-LANGUAGE': 'sign language', 'HEARING-AID': 'hearing aid', CAR: 'car', TV: 'TV' };
+const VERB_WORD = { RESERVE: 'book', SIGN: 'sign', CHECK: 'check' };
+const VERB_PREP = { APPLY: 'for', ASK: 'for', WAIT: 'for', PAY: 'for' };
+const PAST = { LOSE: 'lost', FORGET: 'forgot' };
+const UNCOUNT = new Set(['water', 'food', 'help', 'money', 'tea', 'coffee', 'milk', 'information', 'time', 'medicine', 'sign language', 'Wi-Fi']);
+const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+const word = (g) => (g.startsWith('FS:') ? (NOUN_WORD[g] || cap(g.slice(3).toLowerCase())) : /^\d+$/.test(g) ? g : NOUN_WORD[g] || g.toLowerCase().replace(/-/g, ' '));
+const article = (np) => (UNCOUNT.has(np) || /^[A-Z0-9]/.test(np) ? '' : /^[aeiou]/.test(np) ? 'an ' : 'a ');
+
+export function composeSentence(glosses) {
+  let g = glosses.filter(Boolean);
+  // "2 NIGHT" / "3 DAY" is a duration: "for 2 nights"
+  let dur = '';
+  const di = g.findIndex((t, i) => /^\d+$/.test(t) && ['NIGHT', 'DAY', 'HOUR', 'MINUTE', 'WEEK', 'MONTH', 'YEAR'].includes(g[i + 1]));
+  if (di >= 0) {
+    const n = g[di], unit = g[di + 1].toLowerCase();
+    dur = ` for ${n} ${unit}${n === '1' ? '' : 's'}`;
+    g = g.filter((_, i) => i !== di && i !== di + 1);
   }
+  const has = (t) => g.includes(t);
+  const greet = has('HELLO') || has('NAMASTE'), thanks = has('THANK-YOU'), please = has('PLEASE'), again = has('AGAIN') || has('REPEAT');
+  const core = g.filter((t) => !['HELLO', 'NAMASTE', 'THANK-YOU', 'PLEASE', 'AGAIN'].includes(t));
+  // a state plus a request is two clauses: ME SICK DOCTOR NEED -> "I am sick. I need a doctor."
+  const adj0 = core.find((t) => ADJ.has(t));
+  if (adj0 && core.some((t) => NEEDS.has(t) || (VERB.has(t) && t !== adj0)) && !core.some((t) => WH.has(t))) {
+    const subj = core.filter((t) => SUBJ[t]);
+    const first = composeSentence([...subj, adj0, ...(core.includes('NOT') ? ['NOT'] : [])]).replace(/\.$/, '');
+    const rest = composeSentence([...(greet ? ['HELLO'] : []), ...subj, ...core.filter((t) => t !== adj0 && t !== 'NOT' && !SUBJ[t]), ...(please ? ['PLEASE'] : []), ...(thanks ? ['THANK-YOU'] : [])]);
+    return rest.startsWith('Hello! ') ? `Hello! ${first}. ${rest.slice(7)}` : `${first}. ${rest}`;
+  }
+  const subjTok = core.find((t) => SUBJ[t]);
+  const wh = core.find((t) => WH.has(t));
+  const neg = core.includes('NOT') || (core.includes('NO') && core.length > 1);
+  const can = core.includes('CAN');
+  const adj = core.find((t) => ADJ.has(t) && !(t === 'CLEAN' && core.some((x) => x === 'ROOM')));
+  const verbs = core.filter((t) => VERB.has(t));
+  const need = core.find((t) => NEEDS.has(t));
+  const time = core.filter((t) => TIME[t]).map((t) => TIME[t]);
+  const nounToks = core.filter((t) => !SUBJ[t] && !WH.has(t) && !['NOT', 'NO', 'CAN', 'MY', 'YOUR', 'NAME'].includes(t) && t !== adj && !VERB.has(t) && !NEEDS.has(t) && !TIME[t]);
+  const nouns = nounToks.map(word).join(' ');
+  const S = subjTok ? SUBJ[subjTok] : 'I';
+  const be = S === 'I' ? 'am' : 'are';
+  const poss = subjTok === 'YOU' || core.includes('YOUR') ? 'your' : subjTok === 'ME' || core.includes('MY') ? 'my' : 'the';
+  const verb = verbs[0] ? VERB_WORD[verbs[0]] || verbs[0].toLowerCase() : null;
+  const prep = verbs[0] && VERB_PREP[verbs[0]] && nouns ? ' ' + VERB_PREP[verbs[0]] : '';
+  const future = time.some((t) => ['tomorrow', 'later', 'soon', 'tonight'].includes(t));
+  const tail = dur + (time.length ? ' ' + time.join(' ') : '') + (again ? ' again' : '');
+  // a countable object after a verb takes "a": "book a room"
+  const obj = (np) => (np && !/^(the|my|your) /.test(np) ? article(np) + np : np);
+  let s, q = false;
+
+  if (core.includes('NAME') && g.some((t) => t.startsWith('FS:')) && !wh) {
+    const nm = g.filter((t) => t.startsWith('FS:')).map(word).join(' ');
+    s = subjTok === 'YOU' ? `Your name is ${nm}` : `My name is ${nm}`;
+  } else if (wh) {
+    q = true;
+    const np = core.includes('NAME') ? `${poss === 'the' ? 'your' : poss} name` : nouns ? `${poss} ${nouns}` : '';
+    if (wh === 'WHAT') s = np ? `What is ${np}` : verb ? `What do ${subjTok ? S : 'you'} ${verb}` : need ? `What do ${subjTok ? S : 'you'} ${need.toLowerCase()}` : 'What';
+    else if (wh === 'WHERE') s = np ? `Where is ${np}` : verb ? `Where can I ${verb}` : subjTok === 'YOU' ? 'Where are you' : 'Where';
+    else if (wh === 'WHEN') s = np ? `When is ${np}` : verb ? `When do ${subjTok ? S : 'I'} ${verb}` : 'When';
+    else if (wh === 'HOW') {
+      if (core.some((t) => ['MONEY', 'COST', 'PRICE', 'PAY', 'MUCH'].includes(t))) {
+        const item = nounToks.filter((t) => !['MONEY', 'COST', 'PRICE', 'MUCH'].includes(t)).map(word).join(' ');
+        s = `How much does ${item ? 'the ' + item : 'it'} cost`;
+      } else s = verb ? `How do I ${verb}${prep}${nouns ? ' ' + poss + ' ' + nouns : ''}` : subjTok === 'YOU' ? 'How are you' : np ? `How is ${np}` : 'How';
+    } else if (wh === 'WHO') s = subjTok === 'YOU' && !nouns ? 'Who are you' : np ? `Who is ${np}` : 'Who';
+    else if (wh === 'WHY') s = verb ? `Why do ${subjTok ? S : 'you'} ${verb}` : adj ? `Why ${S === 'I' ? 'am I' : 'are ' + S} ${adj.toLowerCase()}` : 'Why';
+    else s = nouns ? `Which ${nouns}` : 'Which';
+    s += tail;
+  } else if (adj && !verb) {
+    s = `${cap(S)} ${be}${neg ? ' not' : ''} ${word(adj)}${nouns ? ' ' + nouns : ''}${tail}`;
+  } else if (can && (verb || need)) {
+    const v = verb || need.toLowerCase();
+    // YOU HELP ME CAN: "you" is the subject, "me" the object
+    const obj = (subjTok === 'YOU' && core.includes('ME') ? ' me' : '') + (nouns ? ' ' + nouns : '');
+    if (subjTok === 'YOU' || !subjTok) (q = true), (s = `${neg ? "Can't" : 'Can'} you ${v}${obj}${tail}`);
+    else s = `${cap(S)} can${neg ? 'not' : ''} ${v}${obj}${tail}`;
+  } else if (verb && PAST[verbs[0]]) {
+    s = `${cap(S)} ${PAST[verbs[0]]}${nouns ? ` ${poss === 'the' ? 'my' : poss} ${nouns}` : ' it'}${tail}`;
+  } else if (need) {
+    const v = need === 'HAVE' ? 'have' : need.toLowerCase();
+    const o = verb ? `to ${verb}${prep}${nouns ? ' ' + obj(nouns) : ''}` : nouns ? obj(nouns) : 'help';
+    s = `${cap(S)} ${neg ? `do not ${v}` : v} ${o}${tail}`;
+  } else if (verb) {
+    const o = verbs.slice(1).map((t) => VERB_WORD[t] || t.toLowerCase()).concat(nouns ? [obj(nouns)] : []).join(' ');
+    const v = `${neg ? (future ? 'will not ' : 'do not ') : future ? 'will ' : ''}${verb}${prep}`;
+    s = subjTok || neg || future ? `${cap(S)} ${v}${o ? ' ' + o : ''}${tail}` : `${cap(verb)}${prep}${o ? ' ' + o : ''}${tail}`;
+  } else if (nouns) {
+    s = `${cap(nouns)}${tail}`;
+  } else if (neg) s = 'No';
+  else if (subjTok) s = cap(S);
+
+  const out = [];
+  if (greet) out.push('Hello!');
+  if (s) {
+    if (please) s += q ? ', please' : ', please';
+    out.push(cap(s) + (q ? '?' : '.'));
+  } else if (please && again) out.push('Could you sign that again, please?');
+  else if (please) out.push('Please.');
+  if (thanks) out.push('Thank you!');
+  return out.join(' ');
+}
+
+// `extra` templates (e.g. the flight venue's) are tried before the hotel ones.
+// A template is used only if it covers everything that was signed; otherwise composeSentence() builds it.
+const FUNC = new Set(['HELLO', 'NAMASTE', 'PLEASE', 'THANK-YOU', 'ME', 'YOU', 'MY', 'WANT', 'NEED', 'HAVE']);
+export function glossToEnglish(glosses, extra = []) {
+  const set = new Set(glosses);
+  const content = glosses.filter((t) => !FUNC.has(t) && !/^\d+$/.test(t) && !(t.startsWith('FS:') && !['FS:WIFI', 'FS:VEG', 'FS:BELT', 'FS:HOT'].includes(t)));
+  // (a question word is covered by a question template that starts with it, or by any specific 2+ sign question)
+  const tpl = [...extra, ...TEMPLATES].find(([need, sent]) => need.every((n) => set.has(n)) && !(need.length === 1 && need[0] === 'HELLO') &&
+    content.every((t) => need.includes(t) || (WH.has(t) && sent.endsWith('?') && (sent.toUpperCase().startsWith(t) || need.length > 1))));
+  const seat = set.has('CHAIR') && glosses.some((t) => /^\d+$/.test(t)); // flight seat numbers keep their own wording
+  if (!tpl && content.length && !seat) return composeSentence(glosses);
+  const nums = glosses.filter((g) => /^\d+$/.test(g));
+  // fingerspelled vocabulary words (not names) are covered by the templates
+  let spelled = glosses.filter((g) => g.startsWith('FS:') && !['FS:WIFI', 'FS:VEG', 'FS:BELT', 'FS:HOT'].includes(g)).map((g) => g.slice(3));
+  const parts = [];
+  // flight seats: CHAIR 12 FS:A -> "My seat is 12A."
+  const seatLetter = set.has('CHAIR') && nums.length ? spelled.find((w) => /^[A-F]$/.test(w)) : null;
+  if (seatLetter) spelled = spelled.filter((w) => w !== seatLetter);
+  if (set.has('HELLO')) parts.push('Hello!');
+  const body = tpl?.[1];
   if (body && body !== 'Hello!') parts.push(body);
   if (nums.length) {
-    if (set.has('NIGHT') || set.has('DAY')) parts.push(`For ${nums.join(' ')} ${set.has('NIGHT') ? 'night' : 'day'}${nums[0] === '1' ? '' : 's'}.`);
+    if (set.has('CHAIR')) parts.push(`My seat is ${nums.join('')}${seatLetter || ''}.`);
+    else if (set.has('NIGHT') || set.has('DAY')) parts.push(`For ${nums.join(' ')} ${set.has('NIGHT') ? 'night' : 'day'}${nums[0] === '1' ? '' : 's'}.`);
     else if (set.has('ROOM')) parts.push(`Room ${nums.join('')}.`);
     else parts.push(`Number ${nums.join('')}.`);
   }
   if (spelled.length) parts.push(`${set.has('NAME') || parts.length === 0 ? 'My name is' : ''} ${spelled.map((w) => w[0] + w.slice(1).toLowerCase()).join(' ')}.`.trim());
   if (set.has('TOMORROW')) parts.push('For tomorrow.');
-  if (set.has('PLEASE') && !parts.some((p) => /please/i.test(p))) parts.push('Please.');
-  if (!parts.length || (parts.length === 1 && parts[0] === 'Hello!' && glosses.length > 1)) {
-    // generic: map glosses to words, question marker if wh-word present
-    const words = glosses.filter((g) => g !== 'HELLO').map((g) => WORD[g] || (g.startsWith('FS:') ? g.slice(3) : g.toLowerCase().replace('-', ' ')));
-    const wh = words.findIndex((w) => /^(what|where|when|how|why)$/.test(w));
-    if (wh > 0) words.unshift(words.splice(wh, 1)[0]);
-    let s = words.join(' ');
-    s = s.charAt(0).toUpperCase() + s.slice(1);
-    parts.push(s + (wh >= 0 ? '?' : '.'));
-  }
+  if (set.has('PLEASE') && !parts.some((p) => /please|\?$/i.test(p))) parts.push('Please.');
+  if (set.has('THANK-YOU') && !parts.some((p) => /thank/i.test(p))) parts.push('Thank you!');
+  if (!parts.length || (parts.length === 1 && parts[0] === 'Hello!' && glosses.length > 1)) return composeSentence(glosses);
   return parts.join(' ').replace(/\s+/g, ' ').trim();
 }

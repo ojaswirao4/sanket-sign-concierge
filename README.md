@@ -15,7 +15,7 @@ Open http://localhost:5173 in **Chrome or Edge** (they support the Web Speech AP
 
 **Optional: Claude AI for open-ended questions.** Set `ANTHROPIC_API_KEY` before `npm start`. Questions the offline brain can't answer then go to Claude (model set in `server.js`). Claude replies with both English and a sign gloss. Without a key, everything runs offline.
 
-**Tests:** with the server running, `npm test` drives the real page in headless Chrome (18 checks: welcome, all service tiles, booking flow, room lookup, Call staff, interpreter mode, sign board, camera, kiosk reset, motion smoothness, every dataset sign, phone layout, console errors). Screenshots go to `tests/shots/`.
+**Tests:** with the server running, `npm test` drives the real page in headless Chrome (27 checks: welcome, all service tiles, booking flow, room lookup, Call staff, interpreter mode, sign board, camera, kiosk reset, motion smoothness, every dataset sign, the flight venue's tiles, order flow and sign board, the welfare venue's tiles, official links and find-my-schemes flow, the live sentence preview, phone layout, console errors). Screenshots go to `tests/shots/`.
 
 ## What it does
 
@@ -35,6 +35,42 @@ Open http://localhost:5173 in **Chrome or Edge** (they support the Web Speech AP
 > **Demo note:** *Call staff* only shows a confirmation and Meera signs it; it doesn't alert anyone yet. Connect it to the hotel's paging or SMS system before real use.
 
 **Hotel knowledge (offline):** room booking (a step-by-step flow ending with a booking ID and room number), room-number lookup by name or booking ID (e.g. "Priya Sharma" or `KSR1022`), prices, check-in/out, Wi-Fi, food, room service, pool, gym, spa, towels, housekeeping, laundry, taxis and the airport, parking, lost key, repairs, Deaf-friendly room features, doctor, payment, cancellation, emergencies, and more. Edit `public/js/bot.js` to change the hotel data. `public/js/faq.js` holds about 135 more Q&A topics (veg, Jain, halal, allergies, ID rules, accessibility, safety, complaints, small talk). All facts are demo placeholders.
+
+## Second venue: in-flight cabin
+
+Sanket also runs as a **signing cabin assistant** on a fictional Kesar Air flight (KR 214, Mumbai → Jaipur). Pick it with the switch on the welcome screen, in Settings, or lock a kiosk to it with `?venue=flight` (`?venue=hotel` locks the hotel). The flight venue changes:
+
+- **Scene:** a night aircraft cabin behind Meera (overhead bins, oval windows, galley curtain) with a galley counter, a paper cup and a folded blanket, kept dark so her hands stay clear.
+- **Tiles:** safety briefing, my seat, meals, drinks, blanket, restroom, landing time, connections, feeling unwell, emergency.
+- **Brain** (`public/js/flight.js`): seat lookup by name or booking code (`K7Q2XM` → 12A), an **order flow** that brings meals, drinks, blankets and pillows to the seat and ends with an *Order placed* card, landing time, restrooms, safety, feeling unwell, call crew and emergencies. `public/js/flight-faq.js` holds about 40 Q&A topics (bags, connections, turbulence, ear pressure, devices, captions, babies…), shared with Claude's flight prompt.
+- **Flight strip:** route, live progress and minutes to landing above the tiles.
+- **Interpreter phrases** for crew, a flight **sign board** (CHAIR, ARRIVE, BLANKET, SICK, …) and gloss → English templates such as BLANKET → "Could I have a blanket, please?" or CHAIR 12 A → "My seat is 12A."
+
+## Third venue: welfare schemes guide
+
+Meera also works as a **guide to Indian government schemes for Deaf, hard-of-hearing and speech-impaired people** (`?venue=schemes`, or the welcome screen / Settings). It covers 18 schemes and rights:
+- UDID card
+- ADIP hearing aids and cochlear implants
+- disability pension
+- scholarships, fellowships and free coaching
+- education and job reservation
+- PM-DAKSH training
+- NDFDC loans
+- railway concession and driving licence
+- income tax deductions
+- ISLRTC, free hearing screening and the Sugamya Bharat app
+- state schemes
+
+- **Official documents with every answer:** each scheme reply shows a card with how to apply, the documents you need (checklist) and buttons to the official portal / guidelines PDF (only `gov.in` / `nic.in` links; the test suite checks this).
+- **Find my schemes:** four questions (certificate %, age, studying/working/job-seeking, BPL), then a tappable list of the schemes that fit.
+- Follow-ups such as "what documents do I need?" and "how do I apply?" refer to the scheme just discussed.
+- Data lives in `public/js/schemes-data.js` (shared with Claude's prompt). Figures that couldn't be confirmed on an official page carry a `check` note that is shown to the user. **Research date: 23 Oct 2026. Re-verify before real use.** It is an independent guide, not an official government service.
+
+## Signs → full sentences
+
+Signs from the camera or the sign board are turned into a natural English sentence, shown live under the signs (**Meaning**) and sent as the message: `HELLO BATHROOM WHERE` → "Hello! Where is the restroom?", `YOU NAME WHAT` → "What is your name?", `ME UNDERSTAND NOT` → "I do not understand.", `ME SICK DOCTOR NEED` → "I am sick. I need a doctor." Venue templates are used when they cover everything signed; otherwise a small ASL-to-English grammar (`composeSentence` in `bot.js`) moves question words to the front, adds "is / am / the", handles negation, yes/no questions, durations and possessives.
+
+Venues are defined in `public/js/venues.js`; adding another (a hospital desk, a railway counter) means adding an entry there plus a brain with the same `reply` / `fallback` interface.
 
 **Sign vocabulary:** about 80 signs are hand-authored in `signs.js` (plus NAMASTE for greetings). About 500 more come from the WLASL video dataset (see below). English words with no sign are fingerspelled. As in ASL, Meera doesn't sign articles, "be" verbs or most prepositions.
 
@@ -88,11 +124,16 @@ public/index.html      UI (header, stage, service panel, welcome screen, setting
 public/styles.css      ivory / teal / saffron theme, responsive down to phones
 public/js/main.js      UI logic: chat, tiles, modes, welcome, kiosk reset, call staff, booking ticket
 public/js/meera.js     Meera, the avatar built in code
-public/js/avatar.js    scene (Kesar Palace lobby), spline playback, and the classic procedural avatar
+public/js/avatar.js    scene (Kesar Palace lobby / Kesar Air cabin), spline playback, and the classic procedural avatar
 public/js/human.js     the Rocketbox avatar (?avatar=rocketbox)
 public/js/signs.js     handshapes, sign keyframes, fingerspelling, English→gloss
 public/js/bot.js       hotel brain (intents, booking flow, FAQ matcher) + gloss→English
 public/js/faq.js       hotel FAQ dataset (shared with the server's Claude prompt)
+public/js/venues.js    venue definitions (hotel, flight): wording, tiles, phrases, sign board
+public/js/flight.js    in-flight brain (seat lookup, order flow, landing time) + gloss templates
+public/js/flight-faq.js in-flight facts and FAQ (shared with the server's Claude prompt)
+public/js/schemes.js    welfare-schemes brain (scheme answers, documents, find-my-schemes flow)
+public/js/schemes-data.js government schemes data with official links (shared with Claude's prompt)
 public/js/recognizer.js webcam sign recognition (MediaPipe + rules)
 public/js/speech.js    speech recognition / synthesis (prefers an Indian-English voice)
 public/signs/wlasl/    dataset signs (generated by tools/wlasl, WLASL licence applies)

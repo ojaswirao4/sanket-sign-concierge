@@ -186,7 +186,7 @@ await check('sign board builds a sentence and translates it', async () => {
 });
 await check('camera + hand tracking start (fake camera)', async () => {
   await ev(`document.querySelector('.sign-tabs [data-src=camera]').click()`);
-  await waitFor(`document.querySelector('#camLoading').hidden`, 45000);
+  await waitFor(`document.querySelector('#camLoading').hidden`, 120000); // the MediaPipe models download from a CDN
   await shot('06-camera');
   await ev(`document.querySelector('#signClose').click()`);
   await sleep(300);
@@ -236,6 +236,121 @@ await check('HTML in messages is shown as text (no injection)', async () => {
   assert(n === 0, 'img element injected');
   return 'escaped';
 });
+const FLIGHT_TILES = { Safety: /seatbelt|oxygen/i, 'My seat': /name|PNR/i, Meals: /biryani/i, Drinks: /tea|coffee/i, Blanket: /seat number/i, Restroom: /front|back/i, Landing: /land in Jaipur/i, Connections: /next flight/i, 'Feeling unwell': /medicine/i, Emergency: /help is coming/i };
+await check('flight venue: cabin scene, strip and all 10 tiles answer', async () => {
+  await ev(`aria.setVenue('flight')`);
+  const s = await ev(`return {sub: document.querySelector('#brandSub').textContent, strip: !document.querySelector('#flightStrip').hidden, left: document.querySelector('#fsLeft').textContent, greet: document.querySelector('.msg.bot .body').textContent, msgs: document.querySelectorAll('.msg').length}`);
+  assert(/Kesar Air/.test(s.sub) && s.strip && /min to landing/.test(s.left) && /aboard/.test(s.greet) && s.msgs === 1, JSON.stringify(s));
+  for (const [label, re] of Object.entries(FLIGHT_TILES)) {
+    const txt = await ev(`const b=[...document.querySelectorAll('.tile')].find(t=>t.textContent.trim()===${JSON.stringify(label)});b.click();await new Promise(r=>setTimeout(r,150));const m=[...document.querySelectorAll('.msg.bot')];return m[m.length-1].querySelector('.body').textContent`);
+    assert(re.test(txt), `${label}: unexpected reply "${txt.slice(0, 90)}"`);
+    if (['My seat', 'Meals', 'Drinks', 'Blanket'].includes(label)) await say('never mind');
+  }
+  return s.left;
+});
+await check('flight: seat lookup, then an order ends with a card', async () => {
+  await ev(`document.querySelector('#newGuest').click()`);
+  const seat = await say('K7Q2XM');
+  assert(/12A/.test(seat), seat);
+  const done = await say('could I get a coffee please');
+  assert(/seat 12A/.test(done), done);
+  const card = await ev(`const t=[...document.querySelectorAll('.ticket')].pop();return t&&t.textContent`);
+  assert(card && /Order placed/.test(card) && /12A/.test(card), 'no order card');
+  const meal = await say('I am hungry');
+  const veg = await say('veg please');
+  assert(/biryani/i.test(meal) && /paneer biryani to seat 12A/i.test(veg), veg);
+  await sleep(1500);
+  await shot('09-flight');
+  return card.replace(/\s+/g, ' ');
+});
+await check('flight: sign board BLANKET is understood and ordered', async () => {
+  await ev(`document.querySelector('#signBtn').click()`);
+  await ev(`document.querySelector('.sign-tabs [data-src=board]').click()`);
+  await ev(`[...document.querySelectorAll('#boardPane button')].find(b=>b.textContent==='BLANKET').click()`);
+  await ev(`document.querySelector('#bufSend').click()`);
+  await sleep(300);
+  const r = await ev(`const u=[...document.querySelectorAll('.msg.user')].pop(),b=[...document.querySelectorAll('.msg.bot')].pop();return [u.querySelector('.body').textContent,b.querySelector('.body').textContent]`);
+  await ev(`document.querySelector('#signClose').click()`);
+  assert(/blanket/i.test(r[0]) && /blanket to seat 12A/i.test(r[1]), JSON.stringify(r));
+  return `"${r[0]}" → "${r[1].slice(0, 50)}…"`;
+});
+await check('flight: every sign in every reply can be performed', async () => {
+  return ev(`
+    const { hasSign } = await import('/js/signs.js');
+    const bad = [];
+    document.querySelectorAll('.msg.bot .gl').forEach((g) => g.textContent.split(' · ').forEach((t) => {
+      const tok = t.includes('-') && t.length > 1 && /^[A-Z](-[A-Z0-9])+$/.test(t) ? 'FS' : t.replace(' ', '-');
+      if (tok !== 'FS' && !/^\\d+$/.test(tok) && !hasSign(tok) && !/^[A-Z]$/.test(tok)) bad.push(t);
+    }));
+    if (bad.length) throw new Error('unknown signs: ' + [...new Set(bad)].join(', '));
+    return document.querySelectorAll('.msg.bot').length + ' replies checked';`);
+});
+const SCHEME_TILES = { 'Find my schemes': /UDID card\? If yes/i, 'UDID card': /UDID/, 'Hearing aids': /hearing aids/i, Pension: /pension/i, Scholarships: /scholarship/i, 'Jobs & skills': /training|PM-DAKSH/i, Loans: /loan/i, 'Train travel': /50%|concession/i, 'Sign language': /ISLRTC|Sign Language/i, 'State schemes': /state/i };
+await check('welfare schemes venue: all 10 tiles answer, each scheme shows official documents', async () => {
+  await ev(`aria.setVenue('schemes')`);
+  const sub = await ev(`return document.querySelector('#brandSub').textContent`);
+  assert(/welfare/i.test(sub), sub);
+  for (const [label, re] of Object.entries(SCHEME_TILES)) {
+    const txt = await ev(`const b=[...document.querySelectorAll('.tile')].find(t=>t.textContent.trim()===${JSON.stringify(label)});b.click();await new Promise(r=>setTimeout(r,150));const m=[...document.querySelectorAll('.msg.bot')];return m[m.length-1].querySelector('.body').textContent`);
+    assert(re.test(txt), `${label}: unexpected reply "${txt.slice(0, 90)}"`);
+    if (label === 'Find my schemes') await say('never mind');
+  }
+  // every scheme card links only to official government sites
+  const links = await ev(`return [...document.querySelectorAll('.doc-card .doc-link')].map(a=>a.href)`);
+  const cards = await ev(`return document.querySelectorAll('.doc-card').length`);
+  assert(cards >= 9, cards + ' document cards');
+  const bad = links.filter((u) => !/^https:\/\/([a-z0-9-]+\.)*(gov\.in|nic\.in)\//.test(u));
+  assert(!bad.length, 'non-government links: ' + bad.join(' '));
+  return `${cards} document cards, ${links.length} official links`;
+});
+await check('welfare: "find my schemes" asks 4 questions, then lists schemes that open their documents', async () => {
+  await ev(`document.querySelector('#newGuest').click()`);
+  for (const s of ['find my schemes', 'yes I have 85 percent', '30', 'looking for a job']) await say(s);
+  const last = await say('yes');
+  assert(/these schemes can help you/i.test(last) && /pension/i.test(last), last);
+  const n = await ev(`return document.querySelectorAll('.msg.bot:last-child .scheme-list button').length`);
+  assert(n >= 5, n + ' scheme buttons');
+  await ev(`document.querySelector('.msg.bot:last-child .scheme-list button').click()`);
+  await sleep(200);
+  const card = await ev(`const m=[...document.querySelectorAll('.msg.bot')].pop();return m.querySelector('.doc-card .doc-head b')?.textContent`);
+  assert(card, 'tapping a scheme did not show its documents');
+  const docs = await say('what documents do I need');
+  assert(new RegExp(card.split(' ')[0]).test(docs), docs);
+  await sleep(1200);
+  await shot('11-schemes');
+  return `${n} schemes; tapped "${card}"`;
+});
+await check('sign board: live meaning shows the full sentence before sending', async () => {
+  await ev(`document.querySelector('#signBtn').click()`);
+  await ev(`document.querySelector('.sign-tabs [data-src=board]').click()`);
+  await ev(`for (const l of ['HELLO','HEARING AID']) [...document.querySelectorAll('#boardPane button')].find(b=>b.textContent===l).click()`);
+  const meaning = await ev(`return document.querySelector('#bufMeaning').hidden ? '' : document.querySelector('#bufMeaning b').textContent`);
+  assert(meaning === 'Hello! How can I get a free hearing aid?', meaning);
+  await ev(`document.querySelector('#bufSend').click()`);
+  await sleep(300);
+  const r = await ev(`const b=[...document.querySelectorAll('.msg.bot')].pop();return b.querySelector('.body').textContent`);
+  await ev(`document.querySelector('#signClose').click()`);
+  assert(/hearing aid/i.test(r), r);
+  return `"${meaning}"`;
+});
+await check('welfare: every sign in every reply can be performed', async () => {
+  return ev(`
+    const { hasSign } = await import('/js/signs.js');
+    const bad = [];
+    document.querySelectorAll('.msg.bot .gl').forEach((g) => g.textContent.split(' · ').forEach((t) => {
+      const tok = t.includes('-') && t.length > 1 && /^[A-Z](-[A-Z0-9])+$/.test(t) ? 'FS' : t.replace(' ', '-');
+      if (tok !== 'FS' && !/^\\d+$/.test(tok) && !hasSign(tok) && !/^[A-Z]$/.test(tok)) bad.push(t);
+    }));
+    if (bad.length) throw new Error('unknown signs: ' + [...new Set(bad)].join(', '));
+    return document.querySelectorAll('.msg.bot').length + ' replies checked';`);
+});
+await check('switching back to the hotel restores it', async () => {
+  await ev(`aria.setVenue('hotel')`);
+  const s = await ev(`return {strip: document.querySelector('#flightStrip').hidden, tile: document.querySelector('.tile').textContent.trim(), greet: document.querySelector('.msg.bot .body').textContent}`);
+  assert(s.strip && s.tile === 'Check-in' && /Kesar Palace/.test(s.greet), JSON.stringify(s));
+  return s.tile;
+});
+
 await sleep(2500);
 await shot('07-main');
 await check('phone layout (390 px): no sideways scrolling', async () => {
@@ -244,6 +359,12 @@ await check('phone layout (390 px): no sideways scrolling', async () => {
   const w = await ev(`return {sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth}`);
   await shot('08-phone');
   assert(w.sw <= w.cw + 1, JSON.stringify(w));
+  await ev(`aria.setVenue('flight'); document.querySelector('.panel').scrollIntoView()`);
+  await sleep(800);
+  const f = await ev(`return {sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth}`);
+  await shot('10-phone-flight');
+  await ev(`aria.setVenue('hotel')`);
+  assert(f.sw <= f.cw + 1, 'flight: ' + JSON.stringify(f));
   return w;
 });
 await check('no errors in the console or network', async () => {

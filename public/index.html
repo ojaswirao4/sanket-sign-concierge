@@ -36,15 +36,15 @@
           </div>
           <div class="brand-text">
             <div class="brand-name">Sanket <span class="deva">संकेत</span></div>
-            <div class="brand-sub">Sign Language Concierge · Kesar Palace, Jaipur</div>
+            <div id="brandSub" class="brand-sub">Sign Language Concierge · Kesar Palace, Jaipur</div>
           </div>
         </div>
         <div class="mode-switch" role="tablist" aria-label="Mode">
           <button role="tab" data-mode="concierge" class="active" aria-selected="true" title="Meera answers guests' questions in sign language">
-            <svg viewBox="0 0 24 24"><path d="M12 2a5 5 0 1 1 0 10 5 5 0 0 1 0-10zm0 12c5 0 9 2.2 9 5v3H3v-3c0-2.8 4-5 9-5z" /></svg> Concierge
+            <svg viewBox="0 0 24 24"><path d="M12 2a5 5 0 1 1 0 10 5 5 0 0 1 0-10zm0 12c5 0 9 2.2 9 5v3H3v-3c0-2.8 4-5 9-5z" /></svg> <span>Concierge</span>
           </button>
           <button role="tab" data-mode="interpreter" aria-selected="false" title="Meera interprets between hearing staff and a Deaf guest">
-            <svg viewBox="0 0 24 24"><path d="M4 4h10v7H8l-4 3V4zm16 6v10l-4-3h-6v-4h6V10h4z" /></svg> Interpreter
+            <svg viewBox="0 0 24 24"><path d="M4 4h10v7H8l-4 3V4zm16 6v10l-4-3h-6v-4h6V10h4z" /></svg> <span>Interpreter</span>
           </button>
         </div>
         <div class="top-actions">
@@ -54,7 +54,7 @@
           </span>
           <button id="callStaff" class="call-btn" title="Call a staff member to the front desk">
             <svg viewBox="0 0 24 24"><path d="M12 22a2.5 2.5 0 0 0 2.5-2.5h-5A2.5 2.5 0 0 0 12 22zm7-6V11a7 7 0 0 0-5.5-6.8V3.5a1.5 1.5 0 0 0-3 0v.7A7 7 0 0 0 5 11v5l-2 2v1h18v-1l-2-2z" /></svg>
-            <span>Call staff</span>
+            <span id="callLabel">Call staff</span>
           </button>
           <button id="settingsBtn" class="icon-btn" title="Settings" aria-label="Settings">
             <svg viewBox="0 0 24 24"><path d="M12 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7zm7.4-2.5a7.6 7.6 0 0 0 0-2l2.1-1.6-2-3.4-2.5 1a7.4 7.4 0 0 0-1.7-1l-.4-2.7h-4l-.4 2.7a7.4 7.4 0 0 0-1.7 1l-2.5-1-2 3.4L4.6 11a7.6 7.6 0 0 0 0 2l-2.1 1.6 2 3.4 2.5-1a7.4 7.4 0 0 0 1.7 1l.4 2.7h4l.4-2.7a7.4 7.4 0 0 0 1.7-1l2.5 1 2-3.4z" /></svg>
@@ -67,7 +67,7 @@
           <div id="avatar" class="avatar-canvas"></div>
           <div id="stageLoading" class="stage-loading"><div class="spinner"></div>Preparing Meera…</div>
           <div class="stage-top">
-            <div class="stage-tag"><span class="live-dot"></span><b>Meera</b><span class="sep">·</span>Guest Relations</div>
+            <div class="stage-tag"><span class="live-dot"></span><b>Meera</b><span class="sep">·</span><span id="stageRole">Guest Relations</span></div>
             <div id="modeHint" class="mode-hint">Ask me anything · Type, speak, or sign</div>
           </div>
           <div class="caption" aria-live="polite">
@@ -95,8 +95,17 @@
               <p id="panelSub">Tap a service, or type, speak or sign your question.</p>
             </div>
             <button id="newGuest" class="ghost-btn" title="Clear this conversation for the next guest">
-              <svg viewBox="0 0 24 24"><path d="M17.7 6.3A8 8 0 1 0 20 12h-2a6 6 0 1 1-1.8-4.2L13 11h7V4z" /></svg> New guest
+              <svg viewBox="0 0 24 24"><path d="M17.7 6.3A8 8 0 1 0 20 12h-2a6 6 0 1 1-1.8-4.2L13 11h7V4z" /></svg> <span>New guest</span>
             </button>
+          </div>
+          <div id="flightStrip" class="flight-strip" hidden>
+            <div class="fs-end"><b>BOM</b><span>Mumbai</span></div>
+            <div class="fs-track" aria-hidden="true">
+              <div class="fs-line"><div id="fsFill" class="fs-fill"></div></div>
+              <svg id="fsPlane" class="fs-plane" viewBox="0 0 24 24"><path d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z" /></svg>
+            </div>
+            <div class="fs-end right"><b>JAI</b><span>Jaipur</span></div>
+            <div class="fs-meta"><span>KR 214</span><span id="fsLeft">–</span><span id="fsArrive">–</span></div>
           </div>
           <div id="services" class="services"></div>
 
@@ -127,6 +136,7 @@
             <div id="boardPane" class="board" hidden></div>
             <div class="buffer">
               <div id="glossBuffer" class="buffer-chips"><span class="placeholder">Your signs appear here…</span></div>
+              <p id="bufMeaning" class="buf-meaning" aria-live="polite" hidden><span>Meaning</span><b></b></p>
               <div class="buffer-actions">
                 <button id="bufBack" class="ghost" title="Remove last">⌫</button>
                 <button id="bufClear" class="ghost">Clear</button>
@@ -155,29 +165,40 @@
       </main>
 
       <footer class="statusbar">
-        <span><svg viewBox="0 0 24 24"><path d="M4 5h16v11H7l-3 3V5zm3 4v2h10V9H7z" /></svg>Captions always on</span>
-        <span><svg viewBox="0 0 24 24"><path d="M21 7a2 2 0 0 0-4 0v3h-.5V4a2 2 0 0 0-4 0v6H12V3a2 2 0 0 0-4 0v8h-.5V6a2 2 0 0 0-4 0v8.5a8 8 0 0 0 8 8h1a8.5 8.5 0 0 0 8.5-8.5z" /></svg>Signs in American Sign Language</span>
-        <span><svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm1 5v5.4l4 2.4-.8 1.3L11 13V7z" /></svg>Front desk staffed 24 × 7</span>
+        <span><svg viewBox="0 0 24 24"><path d="M4 5h16v11H7l-3 3V5zm3 4v2h10V9H7z" /></svg><i data-status="0">Captions always on</i></span>
+        <span><svg viewBox="0 0 24 24"><path d="M21 7a2 2 0 0 0-4 0v3h-.5V4a2 2 0 0 0-4 0v6H12V3a2 2 0 0 0-4 0v8h-.5V6a2 2 0 0 0-4 0v8.5a8 8 0 0 0 8 8h1a8.5 8.5 0 0 0 8.5-8.5z" /></svg><i data-status="1">Signs in American Sign Language</i></span>
+        <span><svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm1 5v5.4l4 2.4-.8 1.3L11 13V7z" /></svg><i data-status="2">Front desk staffed 24 × 7</i></span>
         <span class="grow"></span>
-        <span class="muted">Kesar Palace Guest Services</span>
+        <span class="muted"><i data-status="3">Kesar Palace Guest Services</i></span>
       </footer>
     </div>
 
     <div id="welcome" class="welcome" role="dialog" aria-modal="true" aria-labelledby="welcomeTitle">
       <div class="welcome-card">
+        <div id="venuePick" class="venue-pick" role="radiogroup" aria-label="Demo scenario">
+          <button role="radio" data-venue="hotel" aria-checked="true">
+            <svg viewBox="0 0 24 24"><path d="M19 19V5a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v14H3v2h18v-2zm-4-6h-2v-2h2z" /></svg> Hotel front desk
+          </button>
+          <button role="radio" data-venue="flight" aria-checked="false">
+            <svg viewBox="0 0 24 24"><path d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z" /></svg> In-flight cabin
+          </button>
+          <button role="radio" data-venue="schemes" aria-checked="false">
+            <svg viewBox="0 0 24 24"><path d="M12 1 3 5v2h18V5zM5 9v8h3V9zm5.5 0v8h3V9zM16 9v8h3V9zM3 19v3h18v-3z" /></svg> Welfare schemes
+          </button>
+        </div>
         <div class="welcome-mark" aria-hidden="true">
           <svg viewBox="0 0 48 48"><path fill="currentColor" d="M20.2 36.5c-3.4-1.2-5.6-4.3-5.6-7.9v-6.4c0-1 .8-1.7 1.7-1.7s1.7.8 1.7 1.7v3.4h.7V13.9c0-1 .8-1.7 1.7-1.7s1.7.8 1.7 1.7v9.2h.7V11.6c0-1 .8-1.7 1.7-1.7s1.7.8 1.7 1.7v11.5h.7v-9.4c0-1 .8-1.7 1.7-1.7s1.7.8 1.7 1.7v10.6h.7v-6.6c0-1 .8-1.7 1.7-1.7s1.7.8 1.7 1.7v10c0 5.3-4.3 9.6-9.6 9.6-1.5 0-2.9-.3-4.2-.9z" /></svg>
         </div>
         <div class="namaste" lang="hi">नमस्ते</div>
         <h1 id="welcomeTitle">Welcome to Kesar Palace</h1>
-        <p class="welcome-lead">I am <b>Meera</b>, your signing concierge. Talk to me the way that suits you.</p>
+        <p id="welcomeLead" class="welcome-lead">I am <b>Meera</b>, your signing concierge. Talk to me the way that suits you.</p>
         <div class="ways">
           <div><span class="way-ic"><svg viewBox="0 0 24 24"><path d="M21 7a2 2 0 0 0-4 0v3h-.5V4a2 2 0 0 0-4 0v6H12V3a2 2 0 0 0-4 0v8h-.5V6a2 2 0 0 0-4 0v8.5a8 8 0 0 0 8 8h1a8.5 8.5 0 0 0 8.5-8.5z" /></svg></span>Sign</div>
           <div><span class="way-ic"><svg viewBox="0 0 24 24"><path d="M20 5H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2zM8 8h2v2H8zm0 3h2v2H8zm-3-3h2v2H5zm0 3h2v2H5zm11 6H8v-2h8zm0-4h-2v-2h2zm0-3h-2V8h2zm3 3h-2v-2h2zm0-3h-2V8h2zm-8 3h2v2h-2zm0-3h2v2h-2z" /></svg></span>Type</div>
           <div><span class="way-ic"><svg viewBox="0 0 24 24"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.9V21h2v-3.1a7 7 0 0 0 6-6.9z" /></svg></span>Speak</div>
         </div>
         <button id="beginBtn" class="begin">Tap to begin</button>
-        <p class="welcome-foot">An accessible front desk for Deaf and hard-of-hearing guests</p>
+        <p id="welcomeFoot" class="welcome-foot">An accessible front desk for Deaf and hard-of-hearing guests</p>
       </div>
     </div>
 
@@ -186,6 +207,13 @@
     <dialog id="settings" class="settings">
       <form method="dialog">
         <h2>Settings</h2>
+        <label>Venue
+          <select id="venueSel">
+            <option value="hotel">Hotel front desk · Kesar Palace</option>
+            <option value="flight">In-flight cabin · Kesar Air KR 214</option>
+            <option value="schemes">Welfare schemes · Government schemes guide</option>
+          </select>
+        </label>
         <label>Speech language
           <select id="lang">
             <option value="en-IN">English (India)</option>
@@ -196,6 +224,7 @@
         </label>
         <label class="row"><input type="checkbox" id="useAI" checked /> Use Claude AI for questions the offline brain can't answer (needs a server key)</label>
         <label class="row"><input type="checkbox" id="sayUser" /> Interpreter mode: also speak signed sentences aloud</label>
+        <label class="row"><input type="checkbox" id="reduceMotion" /> Reduce interface motion (Meera still signs at full detail)</label>
         <label class="row"><input type="checkbox" id="kioskReset" checked /> Kiosk privacy: start fresh after 3 minutes without activity</label>
         <p class="note">Meera signs approximations of American Sign Language (ASL), and camera recognition is rule-based with a small vocabulary. Please review signs with Deaf signers before real-world use.</p>
         <menu><span class="credit">Sanket v2.0 · © 2026 Ojaswi Rao</span><button value="close" class="primary">Done</button></menu>

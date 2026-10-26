@@ -5,6 +5,8 @@ import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { FAQ } from './public/js/faq.js';
+import { FLIGHT_FACTS, FLIGHT_FAQ } from './public/js/flight-faq.js';
+import { SCHEMES_FACTS, SCHEMES_CHECKED } from './public/js/schemes-data.js';
 
 const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), 'public');
 const PORT = Number(process.env.PORT) || 5173;
@@ -38,19 +40,40 @@ Airport taxi ₹1,200 (~40 min). Free basement parking, valet available. Doctor 
 Deaf-friendly rooms: flashing fire alarm and doorbell, vibrating alarm, captioned TV; video sign-language interpreter 24h. Elevators are to the left of the front desk.
 Free cancellation up to 24h before check-in. Pets not allowed (service animals welcome). Non-smoking rooms.`;
 
-const SYSTEM = `You are Meera, the signing virtual concierge at the front desk of Kesar Palace, Jaipur. Your guests are often Deaf or hard of hearing; your replies are shown as captions and performed by a 3D avatar in sign language.
+const RULES = (unknown, emergency) => `Reply rules:
+- Warm, clear, short: at most 2–3 plain sentences. Avoid idioms; concrete facts first.
+- ${unknown}
+- ${emergency}
+- Respond ONLY with a JSON object: {"text": "<English reply>", "gloss": ["TOKEN", ...]}.
+- "gloss" is the ASL-style sign sequence (topic-comment order, no articles), max 12 tokens. Each token must be one of: ${VOCAB}; or a number written as digits (e.g. "305"); or "FS:WORD" to fingerspell a short word or name (use sparingly, max 2).`;
+
+// one system prompt per venue (see public/js/venues.js)
+const SYSTEMS = {
+  hotel: `You are Meera, the signing virtual concierge at the front desk of Kesar Palace, Jaipur. Your guests are often Deaf or hard of hearing; your replies are shown as captions and performed by a 3D avatar in sign language.
 
 ${HOTEL_FACTS}
 
 Hotel FAQ (authoritative; use these facts when relevant):
 ${FAQ.map((e) => `- ${e.q[0]}: ${e.a}`).join('\n')}
 
-Reply rules:
-- Warm, clear, short: at most 2–3 plain sentences. Avoid idioms; concrete facts first.
-- If you do not know a hotel-specific fact, say a staff member at the desk will confirm, rather than inventing details.
-- For emergencies, tell them help is coming and to press the SOS button in the room.
-- Respond ONLY with a JSON object: {"text": "<English reply>", "gloss": ["TOKEN", ...]}.
-- "gloss" is the ASL-style sign sequence (topic-comment order, no articles), max 12 tokens. Each token must be one of: ${VOCAB}; or a number written as digits (e.g. "305"); or "FS:WORD" to fingerspell a short word or name (use sparingly, max 2).`;
+${RULES('If you do not know a hotel-specific fact, say a staff member at the desk will confirm, rather than inventing details.', 'For emergencies, tell them help is coming and to press the SOS button in the room.')}`,
+  flight: `You are Meera, a signing virtual cabin assistant on a Kesar Air flight, shown on the seatback screen and the crew tablet. Your passengers are often Deaf or hard of hearing; your replies are shown as captions and performed by a 3D avatar in sign language.
+
+${FLIGHT_FACTS}
+
+Flight FAQ (authoritative; use these facts when relevant):
+${FLIGHT_FAQ.map((e) => `- ${e.q[0]}: ${e.a}`).join('\n')}
+
+${RULES('If you do not know a flight-specific fact, say a crew member will confirm, rather than inventing details.', 'For emergencies, tell them to stay calm, that the crew are coming, and to press the call button above their seat.')}`,
+  schemes: `You are Meera, a signing guide at a welfare help desk who explains Indian government schemes for Deaf, hard-of-hearing and speech-impaired people. You are an independent guide, not an official government service. Your replies are shown as captions and performed by a 3D avatar in sign language.
+
+Schemes you know (researched ${SCHEMES_CHECKED}; amounts and rules can change):
+${SCHEMES_FACTS}
+
+${RULES('Never invent amounts, dates, eligibility or links. If a fact is not listed above, or marked UNVERIFIED, say the person should confirm on the official portal or at the district social welfare office. Mention that most schemes need a UDID card or disability certificate (40% or more).', 'For emergencies, tell them to call or text 112, India’s emergency number, and that staff here will help.')}`,
+};
+const PEOPLE = { hotel: 'a Deaf hotel guest into one natural, polite English sentence written in the first person (the guest speaking to the front desk)', flight: 'a Deaf airline passenger into one natural, polite English sentence written in the first person (the passenger speaking to the cabin crew)', schemes: 'a Deaf visitor at a government welfare help desk into one natural, polite English sentence written in the first person (the visitor asking about schemes)' };
+const venueOf = (v) => (v in SYSTEMS ? v : 'hotel');
 
 function parseReply(raw) {
   const m = raw.match(/\{[\s\S]*\}/);
@@ -100,7 +123,7 @@ const server = http.createServer(async (req, res) => {
 
     if (url.pathname === '/api/chat' && req.method === 'POST') {
       if (!client) return send(res, 503, { error: 'AI not configured' });
-      const { message, history = [] } = await body(req);
+      const { message, history = [], venue } = await body(req);
       // history already ends with the current user message; keep valid alternation
       const msgs = history
         .filter((m) => (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string' && m.content.trim())
@@ -113,16 +136,19 @@ const server = http.createServer(async (req, res) => {
         else acc.push({ ...m });
         return acc;
       }, []);
-      const raw = await claude(SYSTEM, merged);
-      if (!raw) return send(res, 200, { text: 'Sorry, I cannot help with that. A staff member at the desk will be happy to assist you.', gloss: ['SORRY', 'HOTEL', 'HELP', 'YOU'] });
+      const raw = await claude(SYSTEMS[venueOf(venue)], merged);
+      if (!raw)
+        return send(res, 200, venueOf(venue) === 'flight'
+          ? { text: 'Sorry, I cannot help with that. A crew member will be happy to assist you.', gloss: ['SORRY', 'STAFF', 'HELP', 'YOU'] }
+          : { text: 'Sorry, I cannot help with that. A staff member at the desk will be happy to assist you.', gloss: ['SORRY', 'HOTEL', 'HELP', 'YOU'] });
       return send(res, 200, parseReply(raw));
     }
 
     if (url.pathname === '/api/translate' && req.method === 'POST') {
       if (!client) return send(res, 503, { error: 'AI not configured' });
-      const { gloss = [] } = await body(req);
+      const { gloss = [], venue } = await body(req);
       const raw = await claude(
-        'You translate ASL-style sign glosses from a Deaf hotel guest into one natural, polite English sentence written in the first person (the guest speaking to the front desk). FS:WORD means a fingerspelled word or name; digits are numbers. Output only the sentence.',
+        `You translate ASL-style sign glosses from ${PEOPLE[venueOf(venue)]}. FS:WORD means a fingerspelled word or name; digits are numbers. Output only the sentence.`,
         [{ role: 'user', content: gloss.slice(0, 40).join(' ') }],
         256
       );

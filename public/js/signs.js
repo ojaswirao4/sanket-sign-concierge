@@ -329,6 +329,38 @@ export const datasetReady = fetch(DATASET_URL + 'index.json')
 
 export const hasSign = (tok) => !!SIGNS[tok] || datasetIndex.has(tok);
 
+// Video tracking sometimes misreads a hand for a single keyframe (~60 ms): a finger jumps half-bent and
+// back, or the palm flips around and back. Those one-keyframe spikes play as flutter / flips, so they are
+// replaced by the average of the two neighbouring keyframes. Palm positions are never changed, and a
+// spike that is part of a repeating pattern (signs that open and close the hand, like MILK) is kept.
+const angDeg = (a, b) => (Math.acos(Math.max(-1, Math.min(1, (a[0] * b[0] + a[1] * b[1] + a[2] * b[2]) / (Math.hypot(...a) * Math.hypot(...b) || 1)))) * 180) / Math.PI;
+export function despike(frames) {
+  const out = frames.map((f) => ({ ...f, R: f.R && { ...f.R }, L: f.L && { ...f.L } }));
+  for (let i = 1; i < frames.length - 1; i++) {
+    for (const s of ['R', 'L']) {
+      const a = frames[i - 1][s], b = frames[i][s], c = frames[i + 1][s];
+      if (!a || !b || !c) continue;
+      const a2 = frames[i - 2]?.[s], c2 = frames[i + 2]?.[s];
+      if (Array.isArray(b.h) && Array.isArray(a.h) && Array.isArray(c.h)) {
+        const h = b.h.slice();
+        for (let k = 0; k < 16; k++) {
+          const spike = Math.abs(b.h[k] - a.h[k]) > 0.45 && Math.abs(b.h[k] - c.h[k]) > 0.45 && Math.abs(a.h[k] - c.h[k]) < 0.2;
+          const repeats = (a2?.h && Math.abs(a2.h[k] - b.h[k]) < 0.2) || (c2?.h && Math.abs(c2.h[k] - b.h[k]) < 0.2);
+          if (spike && !repeats) h[k] = (a.h[k] + c.h[k]) / 2;
+        }
+        out[i][s].h = h;
+      }
+      const flip = Math.max(angDeg(a.n, b.n), angDeg(a.f, b.f)) > 60 && Math.max(angDeg(b.n, c.n), angDeg(b.f, c.f)) > 60 && Math.max(angDeg(a.n, c.n), angDeg(a.f, c.f)) < 35;
+      const repeats = (a2 && angDeg(a2.n, b.n) < 35) || (c2 && angDeg(c2.n, b.n) < 35);
+      if (flip && !repeats) {
+        out[i][s].f = a.f.map((v, k) => (v + c.f[k]) / 2);
+        out[i][s].n = a.n.map((v, k) => (v + c.n[k]) / 2);
+      }
+    }
+  }
+  return out;
+}
+
 // Fetch the dataset signs a gloss needs before playing it.
 export async function loadSigns(tokens) {
   await datasetReady;
@@ -337,7 +369,7 @@ export async function loadSigns(tokens) {
     need.map((t) =>
       fetch(DATASET_URL + encodeURIComponent(t) + '.json')
         .then((r) => r.json())
-        .then((d) => (DATASET[t] = d.frames))
+        .then((d) => (DATASET[t] = despike(d.frames)))
         .catch(() => datasetIndex.delete(t))
     )
   );

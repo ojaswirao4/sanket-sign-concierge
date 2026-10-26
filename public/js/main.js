@@ -1,7 +1,9 @@
 import { Avatar } from './avatar.js';
 import { MeeraAvatar } from './meera.js';
 import { hasSign, loadSigns, textToGloss, glossLabel } from './signs.js';
-import { createBot, glossToEnglish } from './bot.js';
+import { glossToEnglish } from './bot.js';
+import { VENUES } from './venues.js';
+import { SCHEMES, SCHEME_CATS, SCHEMES_CHECKED } from './schemes-data.js';
 import { createListener, speak, stopSpeaking, speechSupported } from './speech.js';
 
 const $ = (s) => document.querySelector(s);
@@ -15,22 +17,17 @@ const ICON = {
   ticket: P('M20 12a2 2 0 0 1 2-2V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v4a2 2 0 0 1 0 4v4a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-4a2 2 0 0 1-2-2zm-4.6 4.8L12 14.5l-3.4 2.3 1.1-3.9-3.2-2.5 4-.2L12 6.5l1.5 3.7 4 .2-3.2 2.5z'),
   check: P('M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z'),
 };
-// Service tiles: [label, icon path, question sent to Meera, style]
-const SERVICES = [
-  ['Check-in', 'M12.6 10a4.5 4.5 0 1 0 0 4h2.9v2.5h2.5V14H21v-4zM8.5 14.2a2.2 2.2 0 1 1 0-4.4 2.2 2.2 0 0 1 0 4.4z', 'What time is check-in?'],
-  ['Book a room', 'M19 4h-1V2h-2v2H8V2H6v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2zm0 16H5V9h14zM7 11h5v5H7z', 'I want to book a room'],
-  ['My room', 'M19 19V5a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v14H3v2h18v-2zm-4-6h-2v-2h2z', "What's my room number?"],
-  ['Wi-Fi', 'M12 18.5a1.8 1.8 0 1 0 0 3.6 1.8 1.8 0 0 0 0-3.6zM2.2 8.6l1.9 1.9a11.2 11.2 0 0 1 15.8 0l1.9-1.9a13.9 13.9 0 0 0-19.6 0zm3.9 3.9L8 14.4a5.6 5.6 0 0 1 8 0l1.9-1.9a8.3 8.3 0 0 0-11.8 0z', 'What is the Wi-Fi password?'],
-  ['Dining', 'M8.1 13.3 11 10.5 3.9 3.4a4 4 0 0 0 0 5.7zm6.8-1.8c1.5.7 3.7.2 5.3-1.4 1.9-1.9 2.3-4.7.8-6.2-1.5-1.5-4.3-1.1-6.2.8-1.6 1.6-2.1 3.8-1.4 5.3L3.7 19.7l1.4 1.4 6.9-6.9 6.9 6.9 1.4-1.4-6.9-6.9z', 'When is breakfast?', 'warm'],
-  ['Room service', 'M2 17h20v2H2zm11.8-9.8A2 2 0 0 0 14 6a2 2 0 1 0-4 0c0 .4.1.8.3 1.2A8 8 0 0 0 4 15h16a8 8 0 0 0-6.2-7.8z', 'I would like room service', 'warm'],
-  ['Taxi', 'M18.9 6A1.5 1.5 0 0 0 17.5 5h-11A1.5 1.5 0 0 0 5.1 6L3 12v8a1 1 0 0 0 1 1h1a1 1 0 0 0 1-1v-1h12v1a1 1 0 0 0 1 1h1a1 1 0 0 0 1-1v-8zM6.5 16a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm11 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zM5 11l1.5-4.5h11L19 11z', 'Please call a taxi'],
-  ['Housekeeping', 'M19 9l1.3-2.7L23 5l-2.7-1.3L19 1l-1.3 2.7L15 5l2.7 1.3zm-7.5.5L9 4 6.5 9.5 1 12l5.5 2.5L9 20l2.5-5.5L17 12zM19 15l-1.3 2.7L15 19l2.7 1.3L19 23l1.3-2.7L23 19l-2.7-1.3z', 'I need extra towels'],
-  ['Accessibility', 'M12 2a2 2 0 1 1 0 4 2 2 0 0 1 0-4zm9 7h-6v13h-2v-6h-2v6H9V9H3V7h18z', 'Do you have a Deaf-friendly room?'],
-  ['Emergency', 'M1 21h22L12 2zm12-3h-2v-2h2zm0-4h-2v-4h2z', 'Emergency! I need help', 'alert'],
-];
-const INTERPRETER_PHRASES = ['Welcome! May I see your ID?', 'Your room is ready. Room 305.', 'Breakfast is at 7 AM.', 'Please wait a moment.', 'Do you need help with luggage?', 'Thank you, enjoy your stay!'];
+
+const params = new URLSearchParams(location.search);
+const store = {
+  get: (k) => { try { return localStorage.getItem('sanket.' + k); } catch { return null; } },
+  set: (k, v) => { try { localStorage.setItem('sanket.' + k, v); } catch {} },
+};
+// ?venue=flight locks a kiosk to one venue (and hides the picker on the welcome screen)
+const lockedVenue = VENUES[params.get('venue')] ? params.get('venue') : null;
 
 const state = {
+  venue: lockedVenue || (VENUES[store.get('venue')] ? store.get('venue') : 'hotel'),
   mode: 'concierge',
   voice: true,
   ai: false,
@@ -42,12 +39,13 @@ const state = {
   recMode: 'words',
   started: false,
 };
+const V = () => VENUES[state.venue];
 
 // Meera (our own avatar) by default; ?avatar=rocketbox / ?avatar=classic bring back the earlier ones
-const which = new URLSearchParams(location.search).get('avatar');
+const which = params.get('avatar');
 const AvatarClass = which === 'classic' ? Avatar : which === 'rocketbox' ? (await import('./human.js')).HumanAvatar : MeeraAvatar;
 const avatar = new AvatarClass($('#avatar'));
-let bot = createBot();
+let bot = V().createBot();
 requestAnimationFrame(() => requestAnimationFrame(() => $('#stageLoading').classList.add('done')));
 
 // ---------- captions & playback ----------
@@ -104,23 +102,95 @@ function perform({ text, gloss }, { voice = state.voice } = {}) {
 }
 
 // ---------- chat ----------
-// A confirmed booking also gets a ticket card with the key details.
-function bookingTicket(text) {
-  const id = text.match(/Booking ID (KSR\d+)/)?.[1];
-  const room = text.match(/room number is (\d+)/i)?.[1];
-  if (!id || !room) return null;
-  const floor = text.match(/on the (\w+) floor/i)?.[1] || '';
+// Confirmations (a room booking, an in-flight order) carry a card with the key details.
+function ticketCard(card) {
   const el = document.createElement('div');
   el.className = 'ticket';
-  el.innerHTML = `<div class="ticket-head">${ICON.ticket}Booking confirmed</div><div class="ticket-body"><div><span>Booking ID</span><b></b></div><div><span>Room</span><b></b></div><div><span>Floor</span><b></b></div></div>`;
-  const b = el.querySelectorAll('b');
-  b[0].textContent = id;
-  b[1].textContent = room;
-  b[2].textContent = floor.replace(/^\w/, (c) => c.toUpperCase());
+  el.innerHTML = `<div class="ticket-head">${ICON.ticket}<span></span></div><div class="ticket-body"></div>`;
+  el.querySelector('.ticket-head span').textContent = card.title;
+  for (const [k, v] of card.fields) {
+    const f = document.createElement('div');
+    f.innerHTML = '<span></span><b></b>';
+    f.querySelector('span').textContent = k;
+    f.querySelector('b').textContent = v;
+    el.querySelector('.ticket-body').appendChild(f);
+  }
   return el;
 }
 
-function addMsg(role, text, { source, gloss, label } = {}) {
+// Welfare schemes: the official documents for a scheme (how to apply, documents needed, official links)
+const SCHEME_BY_ID = Object.fromEntries(SCHEMES.map((s) => [s.id, s]));
+const LINK_ICON = {
+  pdf: P('M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zm-1 7V3.5L18.5 9zM8 13h2.5a1.5 1.5 0 0 1 0 3H9v2H8zm1 2h1.5a.5.5 0 0 0 0-1H9z'),
+  portal: P('M19 19H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7h-2zM14 3v2h3.6l-9.8 9.8 1.4 1.4L19 6.4V10h2V3z'),
+  info: P('M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm1 15h-2v-6h2zm0-8h-2V7h2z'),
+};
+function schemeCard(id, docsOnly) {
+  const s = SCHEME_BY_ID[id];
+  const el = document.createElement('div');
+  el.className = 'doc-card';
+  el.innerHTML = `<div class="doc-head">${LINK_ICON.pdf}<div><span>Official documents</span><b></b></div></div><div class="doc-body"></div>`;
+  el.querySelector('.doc-head b').textContent = s.name;
+  const body = el.querySelector('.doc-body');
+  const sec = (title, node) => {
+    const h = document.createElement('h4');
+    h.textContent = title;
+    body.append(h, node);
+  };
+  if (!docsOnly) {
+    const p = document.createElement('p');
+    p.textContent = s.apply;
+    sec('How to apply', p);
+  }
+  if (s.docs.length) {
+    const ul = document.createElement('ul');
+    ul.className = 'doc-list';
+    s.docs.forEach((d) => {
+      const li = document.createElement('li');
+      li.innerHTML = ICON.check;
+      li.append(d);
+      ul.appendChild(li);
+    });
+    sec('Documents you need', ul);
+  }
+  const links = document.createElement('div');
+  links.className = 'doc-links';
+  s.links.forEach((l) => {
+    const a = document.createElement('a');
+    a.href = l.url;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    a.className = 'doc-link ' + l.kind;
+    a.innerHTML = `${LINK_ICON[l.kind] || LINK_ICON.info}<span></span><small></small>`;
+    a.querySelector('span').textContent = l.label;
+    a.querySelector('small').textContent = new URL(l.url).hostname.replace(/^www\./, '');
+    links.appendChild(a);
+  });
+  sec('Official links', links);
+  const foot = document.createElement('p');
+  foot.className = 'doc-foot';
+  foot.textContent = (s.check ? `Please confirm: ${s.check} ` : '') + `Information checked ${SCHEMES_CHECKED}. Rules can change, so always confirm on the official site.`;
+  if (s.check) foot.classList.add('warn');
+  body.appendChild(foot);
+  return el;
+}
+// a list of schemes the visitor can tap to hear about
+function schemeList(ids) {
+  const el = document.createElement('div');
+  el.className = 'scheme-list';
+  ids.forEach((id) => {
+    const s = SCHEME_BY_ID[id];
+    const b = document.createElement('button');
+    b.innerHTML = '<b></b><span></span>';
+    b.querySelector('b').textContent = s.name;
+    b.querySelector('span').textContent = SCHEME_CATS[s.cat];
+    b.onclick = () => handleInput(`Tell me about ${s.name}`, 'text');
+    el.appendChild(b);
+  });
+  return el;
+}
+
+function addMsg(role, text, { source, gloss, label, card, scheme, schemes, docsOnly } = {}) {
   const el = document.createElement('div');
   el.className = `msg ${role}`;
   const src = { text: [ICON.keyboard, 'Typed'], voice: [ICON.mic, 'Spoken'], sign: [ICON.sign, 'Signed'], board: [ICON.sign, 'Sign board'] }[source];
@@ -134,12 +204,12 @@ function addMsg(role, text, { source, gloss, label } = {}) {
     el.appendChild(gl);
   }
   if (role === 'bot') {
-    const ticket = bookingTicket(text);
-    if (ticket) el.appendChild(ticket);
+    if (card) el.appendChild(ticketCard(card));
+    if (scheme && SCHEME_BY_ID[scheme]) el.appendChild(schemeCard(scheme, docsOnly));
+    if (schemes?.length) el.appendChild(schemeList(schemes.filter((id) => SCHEME_BY_ID[id])));
     const b = document.createElement('button');
     b.className = 'replay';
     b.innerHTML = `${ICON.replay}<span>Sign again</span>`;
-    b.querySelector('svg').style.cssText = 'width:13px;height:13px';
     b.onclick = () => perform({ text, gloss }, { voice: false });
     el.appendChild(b);
   }
@@ -160,7 +230,7 @@ async function askAI(message) {
   const r = await fetch('/api/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message, history: state.history.slice(-12) }),
+    body: JSON.stringify({ message, history: state.history.slice(-12), venue: state.venue }),
   });
   if (!r.ok) throw new Error('AI ' + r.status);
   return r.json();
@@ -169,16 +239,17 @@ async function askAI(message) {
 async function handleInput(text, source, glosses) {
   text = text.trim();
   if (!text) return;
+  const v = V();
   if (state.mode === 'interpreter') {
     if (source === 'sign' || source === 'board') {
-      addMsg('user', text, { source, gloss: glosses, label: 'Guest signed' });
+      addMsg('user', text, { source, gloss: glosses, label: `${cap(v.person)} signed` });
       $('#captionText').textContent = '“' + text + '”';
       renderGloss(glosses || []);
       if (state.sayUser) speak(text);
     } else {
-      addMsg('user', text, { source, label: source === 'voice' ? 'Staff said' : 'Staff typed' });
+      addMsg('user', text, { source, label: `${v.staff} ${source === 'voice' ? 'said' : 'typed'}` });
       const g = textToGloss(text, 22);
-      addMsg('bot', text, { gloss: g, label: 'Meera signed to guest' });
+      addMsg('bot', text, { gloss: g, label: `Meera signed to ${v.person}` });
       perform({ text, gloss: g }, { voice: false });
     }
     return;
@@ -186,6 +257,7 @@ async function handleInput(text, source, glosses) {
 
   addMsg('user', text, { source, gloss: glosses });
   state.history.push({ role: 'user', content: text });
+  const venue = state.venue;
   let reply = bot.reply(text);
   if (!reply && state.ai && state.useAI) {
     const t = typing();
@@ -195,13 +267,15 @@ async function handleInput(text, source, glosses) {
       console.warn(e);
     }
     t.remove();
+    if (venue !== state.venue) return; // the venue changed while Claude was answering
   }
   if (!reply) reply = bot.fallback(text);
   state.history.push({ role: 'assistant', content: reply.text });
   const g = sanitizeGloss(reply.gloss?.length ? reply.gloss : textToGloss(reply.text));
-  addMsg('bot', reply.text, { gloss: g });
+  addMsg('bot', reply.text, { gloss: g, card: reply.card, scheme: reply.scheme, schemes: reply.schemes, docsOnly: reply.docsOnly });
   perform({ text: reply.text, gloss: g });
 }
+const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
 // ---------- composer ----------
 $('#composer').addEventListener('submit', (e) => {
@@ -215,7 +289,7 @@ $('#composer').addEventListener('submit', (e) => {
 function renderServices() {
   const box = $('#services');
   box.innerHTML = '';
-  SERVICES.forEach(([label, icon, question, style]) => {
+  V().services.forEach(([label, icon, question, style]) => {
     const b = document.createElement('button');
     b.className = 'tile' + (style ? ' ' + style : '');
     b.innerHTML = `<span class="ic">${P(icon)}</span><span>${label}</span>`;
@@ -228,7 +302,7 @@ function renderQuick() {
   const q = $('#quick');
   q.innerHTML = '';
   if (state.mode !== 'interpreter') return;
-  INTERPRETER_PHRASES.forEach((t) => {
+  V().phrases.forEach((t) => {
     const b = document.createElement('button');
     b.textContent = t;
     b.onclick = () => handleInput(t, 'text');
@@ -237,34 +311,18 @@ function renderQuick() {
 }
 
 // ---------- mode switch ----------
-const MODE_TEXT = {
-  concierge: {
-    hint: 'Ask me anything · Type, speak, or sign',
-    title: 'How may we help you?',
-    sub: 'Tap a service, or type, speak or sign your question.',
-    placeholder: 'Type your question…',
-    intro: { text: 'Concierge mode. Ask me anything about the hotel.', gloss: ['HELLO', 'HELP', 'YOU', 'WHAT'] },
-  },
-  interpreter: {
-    hint: 'Staff speak or type · Guest signs back',
-    title: 'Interpreter',
-    sub: 'Staff: speak or type and Meera signs it. Guest: sign to the camera and it is shown and spoken.',
-    placeholder: 'Staff: type what to sign to the guest…',
-    intro: { text: 'Interpreter mode. I will sign what the staff says, and voice what you sign.', gloss: ['ME', 'SIGN', 'HELP', 'YOU'] },
-  },
-};
 function setMode(mode, { announce = true } = {}) {
   state.mode = mode;
   document.querySelectorAll('.mode-switch button').forEach((x) => {
     x.classList.toggle('active', x.dataset.mode === mode);
     x.setAttribute('aria-selected', x.dataset.mode === mode);
   });
-  const m = MODE_TEXT[mode];
+  const m = V()[mode];
   $('#modeHint').textContent = m.hint;
-  $('#panelTitle').textContent = m.title;
+  $('#panelTitle').textContent = m.title || 'Interpreter';
   $('#panelSub').textContent = m.sub;
   $('#textInput').placeholder = m.placeholder;
-  $('#services').hidden = mode !== 'concierge';
+  $('#services').hidden = mode !== 'concierge' || !$('#signCard').hidden;
   renderQuick();
   if (announce) {
     addMsg('bot', m.intro.text, { gloss: m.intro.gloss });
@@ -290,9 +348,20 @@ function tick() {
   const d = new Date();
   $('#clockTime').textContent = d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
   $('#clockDate').textContent = d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
+  renderFlight();
 }
-tick();
-setInterval(tick, 15000);
+
+// flight venue: route strip with progress and time to landing
+function renderFlight() {
+  const s = state.venue === 'flight' && bot.status?.();
+  $('#flightStrip').hidden = !s;
+  if (!s) return;
+  const pct = Math.round(Math.min(1, Math.max(0, s.progress)) * 100);
+  $('#fsFill').style.width = pct + '%';
+  $('#fsPlane').style.left = pct + '%';
+  $('#fsLeft').textContent = `${s.left} min to landing`;
+  $('#fsArrive').textContent = `Lands ${s.arriveText}`;
+}
 
 let toastTimer;
 function toast(html, ms = 4500) {
@@ -302,25 +371,39 @@ function toast(html, ms = 4500) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => (t.hidden = true), ms);
 }
+let callTimer;
 $('#callStaff').onclick = () => {
   const b = $('#callStaff');
   if (b.classList.contains('sent')) return;
+  const v = V();
   b.classList.add('sent');
-  b.querySelector('span').textContent = 'Staff notified';
-  toast(`${ICON.check}<span>A front desk colleague has been notified and is on the way.</span>`);
-  const reply = { text: 'I have called a colleague to the front desk. Someone will be with you in a moment.', gloss: ['ME', 'CALL', 'HELP', 'NOW', 'PLEASE', 'WAIT'] };
-  addMsg('bot', reply.text, { gloss: reply.gloss });
-  perform(reply);
-  setTimeout(() => {
-    b.classList.remove('sent');
-    b.querySelector('span').textContent = 'Call staff';
-  }, 30000);
+  $('#callLabel').textContent = v.id === 'flight' ? 'Crew notified' : 'Staff notified';
+  toast(`${ICON.check}<span>${v.callToast}</span>`);
+  addMsg('bot', v.callReply.text, { gloss: v.callReply.gloss });
+  perform(v.callReply);
+  callTimer = setTimeout(resetCallButton, 30000);
 };
+function resetCallButton() {
+  clearTimeout(callTimer);
+  $('#callStaff').classList.remove('sent');
+  $('#callLabel').textContent = V().callStaff;
+}
 
-$('#settingsBtn').onclick = () => $('#settings').showModal();
+$('#settingsBtn').onclick = () => {
+  $('#venueSel').value = state.venue;
+  $('#settings').showModal();
+};
 $('#useAI').onchange = (e) => (state.useAI = e.target.checked);
 $('#sayUser').checked = state.sayUser;
 $('#sayUser').onchange = (e) => (state.sayUser = e.target.checked);
+$('#venueSel').onchange = (e) => setVenue(e.target.value);
+$('#venueSel').disabled = !!lockedVenue;
+$('#reduceMotion').checked = store.get('reduceMotion') === '1';
+document.documentElement.classList.toggle('reduce-motion', $('#reduceMotion').checked);
+$('#reduceMotion').onchange = (e) => {
+  document.documentElement.classList.toggle('reduce-motion', e.target.checked);
+  store.set('reduceMotion', e.target.checked ? '1' : '0');
+};
 
 // ---------- microphone ----------
 const listener = createListener({
@@ -357,6 +440,9 @@ $('#recHelp').textContent = REC_HELP.words;
 function renderBuffer() {
   const box = $('#glossBuffer');
   box.innerHTML = '';
+  // live preview of the full sentence the signs mean (HELLO BATHROOM WHERE -> "Hello! Where is the restroom?")
+  $('#bufMeaning').hidden = !state.buffer.length;
+  if (state.buffer.length) $('#bufMeaning b').textContent = glossToEnglish(state.buffer.map((b) => b.tok), V().templates);
   if (!state.buffer.length) return (box.innerHTML = '<span class="placeholder">Your signs appear here…</span>');
   state.buffer.forEach((b) => {
     const s = document.createElement('span');
@@ -386,10 +472,10 @@ async function translateBuffer() {
   const gl = state.buffer.map((b) => b.tok);
   state.buffer = [];
   renderBuffer();
-  let sentence = glossToEnglish(gl);
+  let sentence = glossToEnglish(gl, V().templates);
   if (state.ai && state.useAI && gl.length > 1) {
     try {
-      const r = await fetch('/api/translate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ gloss: gl }) });
+      const r = await fetch('/api/translate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ gloss: gl, venue: state.venue }) });
       if (r.ok) sentence = (await r.json()).text || sentence;
     } catch {}
   }
@@ -413,12 +499,14 @@ async function openSign() {
   $('#signCard').hidden = false;
   $('#services').hidden = true; // make room for the camera and the conversation
   $('#signBtn').classList.add('active');
+  $('#signBtn').setAttribute('aria-pressed', 'true');
   if (!$('#camPane').hidden) await startCamera();
 }
 function closeSign() {
   $('#signCard').hidden = true;
   $('#services').hidden = state.mode !== 'concierge';
   $('#signBtn').classList.remove('active');
+  $('#signBtn').setAttribute('aria-pressed', 'false');
   recognizer?.stop();
 }
 $('#signBtn').onclick = () => ($('#signCard').hidden ? openSign() : closeSign());
@@ -473,31 +561,59 @@ document.querySelectorAll('.sign-tabs button[data-src]').forEach((b) =>
 );
 
 // sign board: tap signs to compose a sentence (also previews the sign on the avatar)
-const BOARD = {
-  Greetings: ['NAMASTE', 'HELLO', 'THANK-YOU', 'PLEASE', 'SORRY', 'YES', 'NO', 'GOOD', 'BYE'],
-  Questions: ['ME', 'YOU', 'WHAT', 'WHERE', 'WHEN', 'HOW', 'WANT', 'NEED', 'HELP', 'CAN'],
-  Hotel: ['ROOM', 'RESERVE', 'KEY', 'CHECK', 'IN', 'OUT', 'NIGHT', 'TOMORROW', 'TIME', 'NUMBER', 'NAME', 'FLOOR', 'ELEVATOR', 'MONEY', 'PAY', 'FS:WIFI'],
-  Services: ['EAT', 'DRINK', 'WATER', 'CLEAN', 'MORE', 'BATHROOM', 'SLEEP', 'SWIM', 'EXERCISE', 'TAXI', 'PARKING', 'CALL', 'DOCTOR', 'EMERGENCY'],
-};
-Object.entries(BOARD).forEach(([cat, toks]) => {
-  const h = document.createElement('div');
-  h.className = 'cat';
-  h.textContent = cat;
-  $('#boardPane').appendChild(h);
-  toks.forEach((t) => {
-    const b = document.createElement('button');
-    b.textContent = glossLabel(t);
-    b.onclick = () => {
-      pushGloss(t);
-      avatar.play([t]);
-    };
-    $('#boardPane').appendChild(b);
+function renderBoard() {
+  const pane = $('#boardPane');
+  pane.innerHTML = '';
+  Object.entries(V().board).forEach(([cat, toks]) => {
+    const h = document.createElement('div');
+    h.className = 'cat';
+    h.textContent = cat;
+    pane.appendChild(h);
+    toks.forEach((t) => {
+      const b = document.createElement('button');
+      b.textContent = glossLabel(t);
+      b.onclick = () => {
+        pushGloss(t);
+        loadSigns([t]).then(() => avatar.play([t])); // dataset signs are fetched on first use
+      };
+      pane.appendChild(b);
+    });
   });
-});
+}
+
+// ---------- venue ----------
+function applyVenueText() {
+  const v = V();
+  document.body.dataset.venue = v.id;
+  $('#brandSub').textContent = v.brandSub;
+  $('#stageRole').textContent = v.role;
+  $('#newGuest span').textContent = v.newGuest;
+  $('#newGuest').title = `Clear this conversation for the next ${v.person}`;
+  $('#callStaff').title = v.id === 'flight' ? 'Call a cabin crew member to this seat' : 'Call a staff member to the front desk';
+  document.querySelectorAll('.mode-switch button').forEach((b) => (b.querySelector('span').textContent = v.tabs[b.dataset.mode]));
+  document.querySelectorAll('[data-status]').forEach((el) => (el.textContent = v.status[el.dataset.status]));
+  $('#welcomeTitle').textContent = v.welcome.title;
+  $('#welcomeLead').innerHTML = v.welcome.lead;
+  $('#welcomeFoot').textContent = v.welcome.foot;
+  document.querySelectorAll('#venuePick button').forEach((b) => b.setAttribute('aria-checked', b.dataset.venue === v.id));
+  document.title = `Sanket · ${v.id === 'flight' ? 'Sign Language Cabin Assistant' : 'Sign Language Concierge'}`;
+  avatar.setVenue?.(v.id);
+  resetCallButton();
+  renderServices();
+  renderBoard();
+}
+function setVenue(id) {
+  if (!VENUES[id] || id === state.venue) return;
+  state.venue = id;
+  if (!lockedVenue) store.set('venue', id);
+  applyVenueText();
+  resetConversation();
+  if (state.started) greet();
+}
+document.querySelectorAll('#venuePick button').forEach((b) => b.addEventListener('click', () => setVenue(b.dataset.venue)));
+$('#venuePick').hidden = !!lockedVenue;
 
 // ---------- welcome, new guest, kiosk privacy ----------
-const GREETING = { text: 'Namaste! Welcome to Kesar Palace. I am Meera. How may I help you today?', gloss: ['NAMASTE', 'WELCOME', 'HOTEL', 'ME', 'FS:MEERA', 'HELP', 'YOU', 'WHAT'] };
-
 function resetConversation() {
   stopSpeaking();
   listener?.active && listener.stop();
@@ -506,17 +622,19 @@ function resetConversation() {
   state.buffer = [];
   state.last = null;
   renderBuffer();
-  bot = createBot();
+  bot = V().createBot();
   $('#chat').innerHTML = '';
   $('#glossStrip').innerHTML = '';
-  $('#captionText').textContent = GREETING.text;
+  $('#captionText').textContent = V().greeting.text;
   $('#textInput').value = '';
-  if (state.mode !== 'concierge') setMode('concierge', { announce: false });
+  setMode('concierge', { announce: false });
+  renderFlight();
   avatar.stop();
 }
 function greet() {
-  addMsg('bot', GREETING.text, { gloss: GREETING.gloss });
-  perform(GREETING);
+  const g = V().greeting;
+  addMsg('bot', g.text, { gloss: g.gloss });
+  perform(g);
 }
 function begin() {
   if (state.started) return;
@@ -548,8 +666,11 @@ setInterval(() => {
 }, 5000);
 
 // ---------- boot ----------
-renderServices();
+applyVenueText();
+$('#captionText').textContent = V().greeting.text;
 setMode('concierge', { announce: false });
+tick();
+setInterval(tick, 15000);
 fetch('/api/health')
   .then((r) => r.json())
   .then((j) => {
@@ -557,10 +678,10 @@ fetch('/api/health')
     const chip = $('#aiStatus');
     chip.querySelector('.label').textContent = j.ai ? 'Claude AI · on' : 'Offline brain';
     chip.classList.toggle('on', j.ai);
-    chip.title = j.ai ? 'Questions outside the hotel knowledge base are answered by Claude' : 'Answers come from the hotel knowledge base. Set ANTHROPIC_API_KEY on the server to enable Claude.';
+    chip.title = j.ai ? 'Questions outside the knowledge base are answered by Claude' : 'Answers come from the offline knowledge base. Set ANTHROPIC_API_KEY on the server to enable Claude.';
   })
   .catch(() => {});
 // ?start skips the welcome screen (used by tests and kiosk launchers)
-if (new URLSearchParams(location.search).has('start')) begin();
+if (params.has('start')) begin();
 
-window.aria = { avatar, perform, get bot() { return bot; }, begin, showWelcome, state };
+window.aria = { avatar, perform, get bot() { return bot; }, begin, showWelcome, setVenue, state };

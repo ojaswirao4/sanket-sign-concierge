@@ -97,7 +97,20 @@ function classify(F) {
   return '?';
 }
 
-export const _test = { features, classify };
+// Which hand is signing. It used to be "the hand on the left of the raw image = the signer's right
+// hand", but that breaks when the webcam driver mirrors the picture (many laptop cameras do) or when
+// the hand crosses the body: the idle hand got read instead of the signing one. Now: the raised hand
+// signs (a hand resting low in the frame is the passive one); at similar heights, as in two-handed
+// signs, keep the hand that was signing (MediaPipe's handedness label identifies it across frames).
+function pickDominant(hands, prevLabel) {
+  if (hands.length === 1) return hands[0];
+  const [a, b] = hands;
+  const higher = a.center.y <= b.center.y ? a : b, lower = higher === a ? b : a;
+  if (lower.center.y - higher.center.y > 0.08) return higher;
+  return hands.find((h) => h.label === prevLabel) || higher;
+}
+
+export const _test = { features, classify, pickDominant };
 
 // ---------- recognizer ----------
 export class SignRecognizer {
@@ -285,17 +298,21 @@ export class SignRecognizer {
     }
     this.noHandSince = now;
     this.idleFired = false;
-    // raw (unmirrored) camera frame: the signer's right hand has the smaller x — treat it as dominant
-    const hands = lms
-      .map((img, i) => {
-        const F = features(wls[i] || img, img);
-        const shape = classify(F);
-        const c = img[9];
-        const tip = /^(1|D|G|L|X)$/.test(shape) ? img[8] : c;
-        return { img, F, shape, center: { x: c.x, y: c.y }, zone: this._zone(tip, face) };
-      })
-      .sort((a, b) => a.center.x - b.center.x);
-    const dom = hands[0];
+    const all = lms.map((img, i) => {
+      const F = features(wls[i] || img, img);
+      const shape = classify(F);
+      const c = img[9];
+      const tip = /^(1|D|G|L|X)$/.test(shape) ? img[8] : c;
+      return { img, F, shape, center: { x: c.x, y: c.y }, zone: this._zone(tip, face), label: hr.handedness?.[i]?.[0]?.categoryName ?? String(i) };
+    });
+    // either hand can sign (left- or right-handed signers, mirrored or unmirrored cameras)
+    const dom = pickDominant(all, this.domLabel);
+    // motion history belongs to one hand: start over if the signing hand switched (it jumps across the
+    // frame), but not when MediaPipe's left/right label merely flickers on the same hand
+    const lastPt = this.hist.a[this.hist.a.length - 1];
+    if (lastPt && d2(lastPt, dom.center) > 0.2) this.hist.a = [];
+    this.domLabel = dom.label;
+    const hands = [dom, ...all.filter((h) => h !== dom)];
     this.hist.a.push({ ...dom.center, t: now, shape: dom.shape, zone: dom.zone });
     if (this.hist.a.length > 40) this.hist.a.shift();
     const mot = this._motion(this.hist.a, now);
