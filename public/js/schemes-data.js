@@ -255,8 +255,8 @@ export const SCHEMES = [
     links: [
       { label: 'SIPDA / Accessible India – Dept. of Empowerment of PwD', url: 'https://depwd.gov.in/en/sipda/', kind: 'info' },
     ],
-    k: ['sugamya', 'accessible india', 'accessibility app', 'complaint about accessibility'],
-    q: ['is there an app for disability schemes'],
+    k: ['sugamya', 'accessible india', 'accessibility app', 'complaint about accessibility', 'not accessible', 'inaccessible', 'no ramp', 'accessibility complaint', 'complain about a building'],
+    q: ['is there an app for disability schemes', 'how do i complain that a building is not accessible', 'report a place that is not accessible'],
     g: 'PHONE GOVERNMENT HELP FIND',
   },
   {
@@ -269,7 +269,7 @@ export const SCHEMES = [
       { label: 'myScheme – search all central and state schemes', url: 'https://www.myscheme.gov.in/', kind: 'portal' },
       { label: 'Tamil Nadu free bus travel – myScheme', url: 'https://www.myscheme.gov.in/schemes/tcdapsotcb', kind: 'info' },
     ],
-    k: ['state scheme', 'my state', 'marriage', 'marriage incentive', 'bus pass', 'free bus', 'unemployment allowance', 'telangana', 'tamil nadu', 'uttar pradesh', 'madhya pradesh', 'maharashtra'],
+    k: ['state scheme', 'my state', 'marriage', 'marriage incentive', 'wedding', 'shaadi', 'bus pass', 'free bus', 'unemployment allowance', 'telangana', 'tamil nadu', 'uttar pradesh', 'madhya pradesh', 'maharashtra'],
     q: ['what schemes does my state have', 'marriage help for deaf couple', 'free bus pass'],
     g: 'PLACE GOVERNMENT HELP DIFFERENT',
     check: 'State amounts change often; check your state’s department before applying.',

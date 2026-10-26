@@ -129,6 +129,55 @@ export function createSchemesBot() {
     return flowStep();
   }
 
+  // Short follow-up questions. They need a scheme: one named in the message, or the one just discussed.
+  function followUp(t) {
+    // a first question about a scheme gets the full answer; follow-ups only once one has been discussed
+    if (!ctx.last) return null;
+    const s = named(t) || BY_ID[ctx.last];
+    if (!s) return null;
+    const link = s.links[0];
+    if (s.id === 'railway' && /\b(escort|companion|attendant|friend|family|someone|helper)\b|come with me|travel with me/.test(t)) {
+      ctx.last = s.id;
+      return { text: 'Yes. One escort travelling with you gets the same 50% concession on the same ticket. Book both seats together, online or at the counter, with your Railway Divyangjan ID card.', gloss: ['YES', 'FRIEND', 'TRAIN', 'MONEY', 'HALF', 'CARD'], scheme: s.id };
+    }
+    if (/\b(refus\w*|reject\w*|denied|deny|not allowed|said no|turned down)\b/.test(t)) {
+      ctx.last = s.id;
+      const tip = s.id === 'driving'
+        ? 'Show the Road Transport Ministry advisory, which says hearing loss alone is not a reason to refuse, and ask the transport office to give the refusal in writing.'
+        : 'Ask the office to give the reason in writing, and check that your documents and certificate percentage are correct.';
+      return { text: `If your ${s.name} application is refused: ${tip} You can then complain to your State Commissioner for Persons with Disabilities, who handles such complaints under the RPwD Act.`, gloss: ['NOT', 'FINISH', 'PAPER', 'ASK', 'GOVERNMENT', 'HELP'], scheme: s.id };
+    }
+    if (/\b(last date|deadline|closing date|when (can|do|should) i apply|when does it (open|start)|window)\b/.test(t)) {
+      ctx.last = s.id;
+      const when = s.id === 'scholarship' || s.id === 'higher'
+        ? 'The National Scholarship Portal usually opens once a year, around July to October.'
+        : 'Most of these schemes are open all year.';
+      return { text: `${when} Dates change, so check the official page for ${s.name} for the current dates.`, gloss: ['TIME', 'YEAR', 'INTERNET', 'CHECK', 'PLEASE'], scheme: s.id, docsOnly: true };
+    }
+    if (/\b(who can (get|apply)|eligib\w*|qualif\w*|age limit|income limit|can i (get|apply|avail)\b|am i allowed)/.test(t)) {
+      ctx.last = s.id;
+      // "I have 50 percent, can I get it?": answer yes or no for the percentage given
+      const pct = t.match(/(\d{1,3})\s*(%|percent|per cent)/);
+      const need = /(\d{2})% or more/.exec(s.who)?.[1];
+      let verdict = '';
+      if (pct && need) verdict = +pct[1] >= +need ? `With ${pct[1]}%, you meet the disability condition. ` : `With ${pct[1]}%, not yet: this one needs ${need}% or more on the certificate. `;
+      return { text: `${verdict}Who can get ${s.name}: ${s.who}`, gloss: ['WHO', 'CAN', ...s.g.split(' ').slice(0, 3)], scheme: s.id };
+    }
+    if (/\b(how much|amount|what (do|will) i get|benefits? of|what is the benefit|interest|rate|stipend|discount|subsidy|cost)\b/.test(t)) {
+      ctx.last = s.id;
+      return { text: `What you get from ${s.name}: ${s.benefit}${s.check ? ' Please confirm the current amount on the official page.' : ''}`, gloss: ['MONEY', 'HOW', 'MANY', ...s.g.split(' ').slice(0, 2)], scheme: s.id };
+    }
+    if (/\b(website|link|portal|online|site|where is the office|which office)\b/.test(t)) {
+      ctx.last = s.id;
+      return { text: `The official place for ${s.name} is: ${link.label} (${link.url.replace(/^https:\/\/(www\.)?/, '').replace(/\/$/, '')}). The buttons on the screen open it.`, gloss: ['INTERNET', 'GOVERNMENT', 'SEE', 'PLEASE'], scheme: s.id, docsOnly: true };
+    }
+    if (/\b(status|track|approved|pending|how long|how many days|when will i get)\b/.test(t)) {
+      ctx.last = s.id;
+      return { text: `You can check the status of your ${s.name} application on the same official portal with your application or registration number, or ask at the office where you applied. Time taken differs by state and scheme.`, gloss: ['FIND', 'INTERNET', 'NUMBER', 'TIME', 'DIFFERENT'], scheme: s.id, docsOnly: true };
+    }
+    return null;
+  }
+
   const INTENTS = [
     ['find', [/find my scheme|which schemes? (am i|can i|do i|for me)|eligible|what can i get|schemes? for me|help me find|suggest/], () => {
       ctx.ans = {};
@@ -145,9 +194,17 @@ export function createSchemesBot() {
       ctx.last = s.id;
       return { text: `For ${s.name}, you need: ${s.docs.join('; ')}.`, gloss: ['PAPER', 'NEED', ...s.g.split(' ').slice(0, 3)], scheme: s.id, docsOnly: true };
     }],
+    ['form', [/\bforms?\b/], (t) => {
+      const s = named(t) || (ctx.last && BY_ID[ctx.last]);
+      if (!s)
+        return R('Most scheme forms are filled online on the official portal, or on paper at the district social welfare office. Tell me which scheme, and I will show you where its form is and which documents to keep ready. The officer at this desk can also help you fill it.', 'FORM INTERNET GOVERNMENT YOU WANT WHAT OFFICER HELP');
+      ctx.last = s.id;
+      return { text: `For ${s.name}, here is how to fill the form: ${s.apply} Keep your documents ready before you start. The officer at this desk can help you fill it.`, gloss: ['FORM', 'HOW', 'PAPER', 'INTERNET', 'HELP', ...s.g.split(' ').slice(0, 2)], scheme: s.id };
+    }],
     ['apply', [/\b(how|where) (do|can|to|should) (i )?apply\b|\bapply(ing)?\b|\bregister\b|\bprocess\b/], (t) => {
-      const s = named(t) || (ctx.last && BY_ID[ctx.last]) || findScheme(t);
-      if (!s) return R('Tell me which scheme, and I will explain how to apply. Or say "find my schemes".', 'YOU WANT WHAT GOVERNMENT HELP');
+      // only a named scheme or the one just discussed; never guess, so ask instead
+      const s = named(t) || (ctx.last && BY_ID[ctx.last]);
+      if (!s) return R('Which scheme would you like to apply for? For example: UDID card, hearing aid, pension or scholarship. Or say "find my schemes".', 'YOU WANT WHAT GOVERNMENT HELP');
       ctx.last = s.id;
       return { text: `How to apply for ${s.name}: ${s.apply}`, gloss: ['HOW', 'GOVERNMENT', 'PAPER', 'INTERNET', ...s.g.split(' ').slice(0, 2)], scheme: s.id };
     }],
@@ -159,8 +216,8 @@ export function createSchemesBot() {
       R('Ask me about any scheme: hearing aids, pension, scholarships, jobs, loans, train concession, or say "find my schemes" and I will ask four short questions.', 'YOU ASK ME GOVERNMENT HELP CAN')],
     ['greeting', [/^(hi|hello|hey|good (morning|afternoon|evening)|namaste)\b/], () =>
       R('Namaste! I am Meera. I can explain government schemes for Deaf and hard-of-hearing people, show the official documents, and help you find what you can get. What would you like to know?', 'NAMASTE ME FS:MEERA GOVERNMENT HELP DEAF YOU WANT WHAT')],
-    ['thanks', [/thank|thanks|appreciate/], () => R('You are most welcome! Anything else about the schemes?', 'WELCOME HAPPY HELP MORE WHAT')],
     ['bye', [/\b(bye|goodbye|see you|that'?s all|nothing else)\b/], () => R('Thank you for coming. All the best with your application!', 'THANK-YOU GOOD BYE')],
+    ['thanks', [/thank|thanks|appreciate/], () => R('You are most welcome! Anything else about the schemes?', 'WELCOME HAPPY HELP MORE WHAT')],
   ];
 
   return {
@@ -178,8 +235,15 @@ export function createSchemesBot() {
         if (r) return r;
       }
 
+      // "help" / "what can you do" on its own is a question about Meera, not about a scheme
+      if (/^(please )?((i )?need (some )?help|help( me)?|can you help( me)?|what can you do|how does this work)( please)?$/.test(t)) return INTENTS.find((i) => i[0] === 'signhelp')[2](t);
+
+      // follow-ups about the scheme just discussed (or one named here): who can get it, how much, links, status
+      const fu = followUp(t);
+      if (fu) return fu;
+
       // "documents" / "how to apply" first: they may name a scheme or refer to the last one
-      for (const name of ['find', 'docs', 'apply']) {
+      for (const name of ['find', 'form', 'docs', 'apply']) {
         const [, res, fn] = INTENTS.find((i) => i[0] === name);
         if (res.some((re) => re.test(t))) return fn(t);
       }
@@ -201,14 +265,15 @@ export function createSchemesBot() {
           return { text: `Schemes for ${SCHEME_CATS[cat].toLowerCase()}: ${nameList(ids)}. Tap one to see the official documents.`, gloss: ['GOVERNMENT', 'HELP', 'YOU', 'CHOICE', 'PLEASE'], schemes: ids };
         }
       }
-      for (const [name, res, fn] of INTENTS) if (!['find', 'docs', 'apply'].includes(name) && res.some((re) => re.test(t))) return fn(t);
+      for (const [name, res, fn] of INTENTS) if (!['find', 'form', 'docs', 'apply'].includes(name) && res.some((re) => re.test(t))) return fn(t);
       if (/^(yes|yeah|ok|okay|sure)$/.test(t)) return R('Great! Ask me about any scheme, or say "find my schemes".', 'GOOD YOU ASK ME');
       if (/^(no|nope|nothing)$/.test(t)) return R('Alright. I am here if you need anything.', 'FINE ME HELP YOU');
       return null;
     },
     fallback(input) {
       const best = input ? faq.best(input) : null;
-      if (best && best.score >= 0.25) {
+      // only guess when the match is fairly strong; a weak guess sends people to the wrong scheme
+      if (best && best.score >= 0.4) {
         const s = BY_ID[best.e.id];
         ctx.last = s.id;
         return { ...schemeReply(s), text: `I think you are asking about ${s.name}. ` + schemeReply(s).text };
