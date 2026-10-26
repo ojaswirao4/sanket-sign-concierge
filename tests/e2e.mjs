@@ -303,6 +303,17 @@ await check('welfare schemes venue: all 10 tiles answer, each scheme shows offic
   assert(!bad.length, 'non-government links: ' + bad.join(' '));
   return `${cards} document cards, ${links.length} official links`;
 });
+await check('long captions are split into pages and "Show all" gives the full text', async () => {
+  const body = await say('Is there a train ticket concession for deaf people?');
+  await sleep(300);
+  const s = await ev(`return {pager: !document.querySelector('#capPager').hidden, page: document.querySelector('#capPage').textContent}`);
+  assert(s.pager && /^1 \/ [2-9]$/.test(s.page), JSON.stringify(s));
+  await ev(`document.querySelector('#capAll').click()`);
+  const full = await ev(`return document.querySelector('#captionText').textContent`);
+  await ev(`document.querySelector('#capAll').click()`);
+  assert(full.replace(/\s+/g, ' ') === body.replace(/\s+/g, ' '), 'full caption differs from the reply');
+  return `${s.page.split('/ ')[1]} pages, full text ${full.length} chars`;
+});
 await check('welfare: "find my schemes" asks 4 questions, then lists schemes that open their documents', async () => {
   await ev(`document.querySelector('#newGuest').click()`);
   for (const s of ['find my schemes', 'yes I have 85 percent', '30', 'looking for a job']) await say(s);

@@ -72,7 +72,13 @@
           </div>
           <div class="caption" aria-live="polite">
             <div id="glossStrip" class="gloss-strip"></div>
-            <p id="captionText" class="caption-text">Namaste! I am Meera. How may I help you today?</p>
+            <p id="captionText" class="caption-text" title="Tap to show the full text">Namaste! I am Meera. How may I help you today?</p>
+            <div id="capPager" class="cap-pager" hidden>
+              <button id="capPrev" aria-label="Previous part of the caption">‹</button>
+              <span id="capPage">1 / 1</span>
+              <button id="capNext" aria-label="Next part of the caption">›</button>
+              <button id="capAll" class="cap-all">Show all</button>
+            </div>
           </div>
           <div class="stage-controls">
             <button id="replayBtn" class="pill" title="Sign the last reply again">

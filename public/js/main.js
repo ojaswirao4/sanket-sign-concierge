@@ -1,6 +1,6 @@
 import { Avatar } from './avatar.js';
 import { MeeraAvatar } from './meera.js';
-import { hasSign, loadSigns, textToGloss, glossLabel } from './signs.js';
+import { hasSign, loadSigns, textToGloss, glossLabel, datasetReady } from './signs.js';
 import { glossToEnglish } from './bot.js';
 import { VENUES } from './venues.js';
 import { SCHEMES, SCHEME_CATS, SCHEMES_CHECKED } from './schemes-data.js';
@@ -62,7 +62,86 @@ function renderGloss(tokens) {
     strip.appendChild(el);
   });
 }
+// ---------- captions in pages, like subtitles ----------
+// The caption box fits about 3 lines; a long answer is split at sentence (or comma) boundaries into pages
+// that turn as Meera signs. ‹ › flip pages, "Show all" (or tapping the text) shows the whole answer.
+const capt = { pages: [''], page: 0, full: false, glossLen: 1, target: 0, shownAt: 0, manual: false };
+function paginate(text) {
+  const box = $('#captionText');
+  const fs = parseFloat(getComputedStyle(box).fontSize) || 17;
+  const perLine = Math.max(24, Math.floor((box.clientWidth || 600) / (fs * 0.52)));
+  const budget = Math.floor(perLine * 3 * 0.92);
+  if (text.length <= budget) return [text];
+  const parts = text.match(/[^.!?;:]+[.!?;:]+["”’)]*\s*|[^.!?;:]+$/g) || [text];
+  // split any single sentence that is still too long at commas, then at word boundaries
+  const pieces = parts.flatMap((p) => (p.length <= budget ? [p] : p.split(/(?<=,)\s+/))).flatMap((p) => {
+    if (p.length <= budget) return [p];
+    const out = [];
+    let cur = '';
+    for (const w of p.split(/\s+/)) {
+      if ((cur + ' ' + w).trim().length > budget) out.push(cur.trim()), (cur = w);
+      else cur = (cur + ' ' + w).trim();
+    }
+    return cur ? [...out, cur] : out;
+  });
+  const pages = [];
+  let cur = '';
+  for (const p of pieces) {
+    if (cur && (cur + ' ' + p).trim().length > budget) pages.push(cur.trim()), (cur = p);
+    else cur = (cur + ' ' + p).trim();
+  }
+  if (cur.trim()) pages.push(cur.trim());
+  return pages;
+}
+function showCapPage(i) {
+  capt.page = Math.max(0, Math.min(capt.pages.length - 1, i));
+  const multi = capt.pages.length > 1;
+  $('#captionText').textContent = capt.full ? capt.pages.join(' ') : capt.pages[capt.page];
+  $('#captionText').classList.toggle('full', capt.full);
+  $('#capPager').hidden = !multi;
+  $('#capPage').textContent = capt.full ? 'All' : `${capt.page + 1} / ${capt.pages.length}`;
+  $('#capPrev').disabled = capt.full || capt.page === 0;
+  $('#capNext').disabled = capt.full || capt.page === capt.pages.length - 1;
+  $('#capAll').textContent = capt.full ? 'Show less' : 'Show all';
+}
+// Pages follow the signing, but each stays up long enough to read (~15 characters a second, at least
+// 2.5 s); pages the signing has passed keep turning on that timer after she finishes. Using ‹ › or
+// "Show all" hands control to the reader.
+let capTimer;
+const readMs = (i) => Math.max(2500, (capt.pages[i] || '').length * 65);
+function capWant(page) {
+  capt.target = Math.max(capt.target, Math.min(capt.pages.length - 1, page));
+  capTick();
+}
+function capTick() {
+  clearTimeout(capTimer);
+  if (capt.manual || capt.full || capt.page >= capt.target) return;
+  const wait = capt.shownAt + readMs(capt.page) - performance.now();
+  if (wait > 0) capTimer = setTimeout(capTick, wait);
+  else {
+    showCapPage(capt.page + 1);
+    capt.shownAt = performance.now();
+    capTick();
+  }
+}
+function setCaption(text, glossLen = 1) {
+  clearTimeout(capTimer);
+  capt.pages = paginate(text);
+  capt.full = false;
+  capt.manual = false;
+  capt.target = 0;
+  capt.shownAt = performance.now();
+  capt.glossLen = Math.max(1, glossLen);
+  showCapPage(0);
+}
+$('#capPrev').onclick = () => ((capt.manual = true), showCapPage(capt.page - 1));
+$('#capNext').onclick = () => ((capt.manual = true), showCapPage(capt.page + 1));
+$('#capAll').onclick = () => ((capt.full = !capt.full), showCapPage(capt.page));
+$('#captionText').onclick = () => capt.pages.length > 1 && ((capt.full = !capt.full), showCapPage(capt.page));
+
 function highlight(gi, frame) {
+  // turn the caption page in step with the signing
+  if (capt.pages.length > 1) capWant(Math.floor(((gi + 1) * capt.pages.length) / capt.glossLen));
   document.querySelectorAll('.gtok').forEach((el) => {
     const i = +el.dataset.i;
     el.classList.toggle('now', i === gi);
@@ -88,15 +167,27 @@ function sanitizeGloss(g) {
     .slice(0, 18);
 }
 
-function perform({ text, gloss }, { voice = state.voice } = {}) {
+// Which words have a video sign is only known once the dataset index has loaded; deciding before that
+// spelled words like TRAIN or CARD letter by letter. So wait for it (it is normally ready long before).
+function perform(reply, opts) {
+  const pending = (state.performing = {});
+  datasetReady.then(() => state.performing === pending && performNow(reply, opts));
+}
+function performNow({ text, gloss }, { voice = state.voice } = {}) {
   const g = sanitizeGloss(gloss && gloss.length ? gloss : textToGloss(text));
   state.last = { text, gloss: g };
-  $('#captionText').textContent = text;
+  setCaption(text, g.length);
   renderGloss(g);
   const last = state.last;
   loadSigns(g).then(() => {
     if (state.last !== last) return; // a newer reply started while signs were loading
-    avatar.play(g, { onGloss: highlight, onDone: () => document.querySelectorAll('.gtok').forEach((e) => e.classList.replace('now', 'done')) });
+    avatar.play(g, {
+      onGloss: highlight,
+      onDone: () => {
+        document.querySelectorAll('.gtok').forEach((e) => e.classList.replace('now', 'done'));
+        if (state.last === last) capWant(capt.pages.length - 1); // show the rest of a long caption
+      },
+    });
   });
   if (voice) speak(text, { onStart: () => avatar.setTalking(true), onEnd: () => avatar.setTalking(false) });
 }
@@ -239,11 +330,12 @@ async function askAI(message) {
 async function handleInput(text, source, glosses) {
   text = text.trim();
   if (!text) return;
+  await datasetReady; // (see perform)
   const v = V();
   if (state.mode === 'interpreter') {
     if (source === 'sign' || source === 'board') {
       addMsg('user', text, { source, gloss: glosses, label: `${cap(v.person)} signed` });
-      $('#captionText').textContent = '“' + text + '”';
+      setCaption('“' + text + '”');
       renderGloss(glosses || []);
       if (state.sayUser) speak(text);
     } else {
@@ -625,7 +717,7 @@ function resetConversation() {
   bot = V().createBot();
   $('#chat').innerHTML = '';
   $('#glossStrip').innerHTML = '';
-  $('#captionText').textContent = V().greeting.text;
+  setCaption(V().greeting.text);
   $('#textInput').value = '';
   setMode('concierge', { announce: false });
   renderFlight();
@@ -667,7 +759,7 @@ setInterval(() => {
 
 // ---------- boot ----------
 applyVenueText();
-$('#captionText').textContent = V().greeting.text;
+setCaption(V().greeting.text);
 setMode('concierge', { announce: false });
 tick();
 setInterval(tick, 15000);
