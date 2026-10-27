@@ -88,6 +88,10 @@
               <svg viewBox="0 0 24 24"><path d="M12 4a9 9 0 0 0-7.8 13.5h15.6A9 9 0 0 0 12 4zm1 10.7a1.5 1.5 0 1 1-2-2l4.5-4.2z" /></svg>
               <input type="range" id="speed" min="0.5" max="1.5" step="0.1" value="1" aria-label="Signing speed" /><output id="speedOut">1.0×</output>
             </label>
+            <div class="pill lang-switch" role="group" aria-label="Caption language" title="Caption language">
+              <button id="capEn" aria-pressed="true">English</button>
+              <button id="capHi" lang="hi" aria-pressed="false">हिंदी</button>
+            </div>
             <button id="voiceBtn" class="pill" aria-pressed="true" title="Speak replies aloud">
               <svg viewBox="0 0 24 24"><path d="M3 10v4h4l5 4V6L7 10H3zm13.5 2a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4zM14 3.2v2.1a7 7 0 0 1 0 13.4v2.1a9 9 0 0 0 0-17.6z" /></svg> Voice
             </button>
@@ -220,6 +224,12 @@
             <option value="schemes">Welfare schemes · Government schemes guide</option>
           </select>
         </label>
+        <label>Sign language
+          <select id="signLang">
+            <option value="asl">American Sign Language (ASL)</option>
+            <option value="isl">Indian Sign Language (pilot, ~260 signs; other words in ASL)</option>
+          </select>
+        </label>
         <label>Speech language
           <select id="lang">
             <option value="en-IN">English (India)</option>
@@ -232,7 +242,7 @@
         <label class="row"><input type="checkbox" id="sayUser" /> Interpreter mode: also speak signed sentences aloud</label>
         <label class="row"><input type="checkbox" id="reduceMotion" /> Reduce interface motion (Meera still signs at full detail)</label>
         <label class="row"><input type="checkbox" id="kioskReset" checked /> Kiosk privacy: start fresh after 3 minutes without activity</label>
-        <p class="note">Meera signs approximations of American Sign Language (ASL), and camera recognition is rule-based with a small vocabulary. Please review signs with Deaf signers before real-world use.</p>
+        <p class="note">Meera signs approximations of American Sign Language (ASL, from the WLASL dataset) or, as a pilot, Indian Sign Language (ISL, from the INCLUDE dataset; words it lacks are signed in ASL and marked). Camera recognition is rule-based with a small vocabulary. Please review signs with Deaf signers before real-world use.</p>
         <menu><span class="credit">Sanket v2.0 · © 2026 Ojaswi Rao</span><button value="close" class="primary">Done</button></menu>
       </form>
     </dialog>

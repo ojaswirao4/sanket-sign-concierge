@@ -1,10 +1,11 @@
 import { Avatar } from './avatar.js';
 import { MeeraAvatar } from './meera.js';
-import { hasSign, loadSigns, textToGloss, glossLabel, datasetReady } from './signs.js';
+import { hasSign, loadSigns, textToGloss, glossLabel, datasetReady, setSignLanguage, signLanguage, signSource } from './signs.js';
 import { glossToEnglish } from './bot.js';
 import { VENUES } from './venues.js';
 import { SCHEMES, SCHEME_CATS, SCHEMES_CHECKED } from './schemes-data.js';
 import { createListener, speak, stopSpeaking, speechSupported } from './speech.js';
+import { toHindi, browserHindi, prepareBrowserHindi } from './hindi.js';
 
 const $ = (s) => document.querySelector(s);
 const P = (d) => `<svg viewBox="0 0 24 24"><path d="${d}"/></svg>`;
@@ -38,6 +39,7 @@ const state = {
   buffer: [], // { tok, kind: 'sign'|'spell'|'num' }
   recMode: 'words',
   started: false,
+  capLang: store.get('capLang') === 'hi' ? 'hi' : 'en', // caption language: English or Hindi
 };
 const V = () => VENUES[state.venue];
 
@@ -59,20 +61,32 @@ function renderGloss(tokens) {
     el.dataset.label = glossLabel(t);
     el.dataset.pos = -1;
     el.textContent = el.dataset.label;
+    if (signLanguage() === 'isl' && signSource(t) === 'asl') {
+      el.classList.add('asl'); // no Indian sign for this word yet: Meera signs it in ASL
+      el.title = 'American sign (no Indian sign for this word yet)';
+    }
     strip.appendChild(el);
   });
+  strip.scrollLeft = 0;
+  highlight.last = -1;
+}
+// keep the sign being made in the middle of the one-line strip
+function centreGloss(gi) {
+  const strip = $('#glossStrip');
+  const el = strip.children[gi];
+  if (el) strip.scrollTo({ left: el.offsetLeft - (strip.clientWidth - el.offsetWidth) / 2, behavior: 'smooth' });
 }
 // ---------- captions in pages, like subtitles ----------
-// The caption box fits about 3 lines; a long answer is split at sentence (or comma) boundaries into pages
+// The caption box shows 2 lines (so it never hides Meera's hands); a long answer is split at sentence (or comma) boundaries into pages
 // that turn as Meera signs. ‹ › flip pages, "Show all" (or tapping the text) shows the whole answer.
 const capt = { pages: [''], page: 0, full: false, glossLen: 1, target: 0, shownAt: 0, manual: false };
 function paginate(text) {
   const box = $('#captionText');
   const fs = parseFloat(getComputedStyle(box).fontSize) || 17;
   const perLine = Math.max(24, Math.floor((box.clientWidth || 600) / (fs * 0.52)));
-  const budget = Math.floor(perLine * 3 * 0.92);
+  const budget = Math.floor(perLine * 2 * 0.92);
   if (text.length <= budget) return [text];
-  const parts = text.match(/[^.!?;:]+[.!?;:]+["”’)]*\s*|[^.!?;:]+$/g) || [text];
+  const parts = text.match(/[^.!?;:।]+[.!?;:।]+["”’)]*\s*|[^.!?;:।]+$/g) || [text]; // । ends a Hindi sentence
   // split any single sentence that is still too long at commas, then at word boundaries
   const pieces = parts.flatMap((p) => (p.length <= budget ? [p] : p.split(/(?<=,)\s+/))).flatMap((p) => {
     if (p.length <= budget) return [p];
@@ -124,15 +138,54 @@ function capTick() {
     capTick();
   }
 }
-function setCaption(text, glossLen = 1) {
+function setCaption(text, glossLen = 1, speaker = 'meera') {
   clearTimeout(capTimer);
+  capt.en = text; // captions are written in English; Hindi is translated from this
+  capt.speaker = speaker;
   capt.pages = paginate(text);
   capt.full = false;
   capt.manual = false;
   capt.target = 0;
   capt.shownAt = performance.now();
   capt.glossLen = Math.max(1, glossLen);
+  $('#captionText').lang = 'en';
   showCapPage(0);
+  if (state.capLang === 'hi') showHindiCaption();
+}
+
+// Swap the caption to other text (its translation) without losing how far the pages have got.
+function relayoutCaption(text, lang) {
+  const n = capt.pages.length;
+  const at = n > 1 ? capt.page / (n - 1) : 0;
+  const want = n > 1 ? capt.target / (n - 1) : 0;
+  capt.pages = paginate(text);
+  const m = capt.pages.length;
+  capt.page = Math.round(at * (m - 1));
+  capt.target = Math.max(capt.page, Math.round(want * (m - 1)));
+  $('#captionText').lang = lang;
+  showCapPage(capt.page);
+  capTick();
+}
+
+// Hindi captions: show the English at once, then the Hindi as soon as it is translated.
+async function showHindiCaption() {
+  const en = capt.en;
+  const hi = await toHindi(en, { serverAI: state.ai && state.useAI, speaker: capt.speaker });
+  if (capt.en !== en || state.capLang !== 'hi') return; // a newer caption, or switched back to English
+  if (hi) relayoutCaption(hi, 'hi');
+  else if (!showHindiCaption.warned) {
+    showHindiCaption.warned = true;
+    toast('Hindi captions are not available in this browser. Use Chrome, or add a Claude API key on the server. Showing English.', 6500);
+  }
+}
+
+function setCapLang(lang) {
+  state.capLang = lang;
+  store.set('capLang', lang);
+  $('#capEn').setAttribute('aria-pressed', lang === 'en');
+  $('#capHi').setAttribute('aria-pressed', lang === 'hi');
+  if (lang === 'hi') showHindiCaption();
+  else relayoutCaption(capt.en || '', 'en');
 }
 $('#capPrev').onclick = () => ((capt.manual = true), showCapPage(capt.page - 1));
 $('#capNext').onclick = () => ((capt.manual = true), showCapPage(capt.page + 1));
@@ -142,6 +195,7 @@ $('#captionText').onclick = () => capt.pages.length > 1 && ((capt.full = !capt.f
 function highlight(gi, frame) {
   // turn the caption page in step with the signing
   if (capt.pages.length > 1) capWant(Math.floor(((gi + 1) * capt.pages.length) / capt.glossLen));
+  if (gi !== highlight.last) centreGloss((highlight.last = gi));
   document.querySelectorAll('.gtok').forEach((el) => {
     const i = +el.dataset.i;
     el.classList.toggle('now', i === gi);
@@ -158,13 +212,17 @@ function highlight(gi, frame) {
   });
 }
 
+const MAX_SIGNS = 80;
+// The sign sequence for a reply: its hand-written gloss, or the whole text signed (always, where the venue asks for it).
+const glossOf = ({ text, gloss }) => sanitizeGloss(!V().fullSigning && gloss?.length ? gloss : textToGloss(text, MAX_SIGNS));
+
 function sanitizeGloss(g) {
   return (g || [])
     .map((t) => String(t).trim().toUpperCase())
     .filter(Boolean)
     .map((t) => (hasSign(t) || t.startsWith('FS:') || /^\d+$/.test(t) ? t : t.length <= 6 && /^[A-Z]+$/.test(t) ? 'FS:' + t : null))
     .filter(Boolean)
-    .slice(0, 18);
+    .slice(0, MAX_SIGNS);
 }
 
 // Which words have a video sign is only known once the dataset index has loaded; deciding before that
@@ -174,7 +232,7 @@ function perform(reply, opts) {
   datasetReady.then(() => state.performing === pending && performNow(reply, opts));
 }
 function performNow({ text, gloss }, { voice = state.voice } = {}) {
-  const g = sanitizeGloss(gloss && gloss.length ? gloss : textToGloss(text));
+  const g = glossOf({ text, gloss });
   state.last = { text, gloss: g };
   setCaption(text, g.length);
   renderGloss(g);
@@ -335,12 +393,12 @@ async function handleInput(text, source, glosses) {
   if (state.mode === 'interpreter') {
     if (source === 'sign' || source === 'board') {
       addMsg('user', text, { source, gloss: glosses, label: `${cap(v.person)} signed` });
-      setCaption('“' + text + '”');
+      setCaption('“' + text + '”', 1, 'guest'); // the guest's own words: no feminine forms in Hindi
       renderGloss(glosses || []);
       if (state.sayUser) speak(text);
     } else {
       addMsg('user', text, { source, label: `${v.staff} ${source === 'voice' ? 'said' : 'typed'}` });
-      const g = textToGloss(text, 22);
+      const g = textToGloss(text, MAX_SIGNS);
       addMsg('bot', text, { gloss: g, label: `Meera signed to ${v.person}` });
       perform({ text, gloss: g }, { voice: false });
     }
@@ -363,7 +421,7 @@ async function handleInput(text, source, glosses) {
   }
   if (!reply) reply = bot.fallback(text);
   state.history.push({ role: 'assistant', content: reply.text });
-  const g = sanitizeGloss(reply.gloss?.length ? reply.gloss : textToGloss(reply.text));
+  const g = glossOf(reply);
   addMsg('bot', reply.text, { gloss: g, card: reply.card, scheme: reply.scheme, schemes: reply.schemes, docsOnly: reply.docsOnly });
   perform({ text: reply.text, gloss: g });
 }
@@ -417,7 +475,7 @@ function setMode(mode, { announce = true } = {}) {
   $('#services').hidden = mode !== 'concierge' || !$('#signCard').hidden;
   renderQuick();
   if (announce) {
-    addMsg('bot', m.intro.text, { gloss: m.intro.gloss });
+    addMsg('bot', m.intro.text, { gloss: glossOf(m.intro) });
     perform(m.intro, { voice: false });
   }
 }
@@ -429,6 +487,33 @@ $('#speed').oninput = (e) => {
   avatar.speed = +e.target.value;
   $('#speedOut').textContent = (+e.target.value).toFixed(1) + '×';
 };
+// caption language: English / हिंदी
+$('#capEn').onclick = () => setCapLang('en');
+$('#capHi').onclick = async () => {
+  if (state.capLang === 'hi') return;
+  // Without a server key, Hindi comes from the browser's translator. Its one-time model download is
+  // only allowed right after a click, so start it here.
+  if (!(state.ai && state.useAI)) {
+    const avail = await browserHindi();
+    if (avail === 'unavailable') {
+      toast('Hindi captions need Chrome’s built-in translator, or a Claude API key on the server. This browser has neither, so captions stay in English.', 7000);
+      return;
+    }
+    if (avail !== 'available') {
+      toast('Getting Hindi ready (a one-time download)…', 20000);
+      const ok = await prepareBrowserHindi((p) => toast(`Getting Hindi ready… ${Math.round(p * 100)}%`, 20000));
+      if (!ok) {
+        toast('Could not download Hindi in this browser. Captions stay in English.', 6000);
+        return;
+      }
+      toast('Hindi captions are ready.', 2500);
+    }
+  }
+  setCapLang('hi');
+};
+$('#capEn').setAttribute('aria-pressed', state.capLang === 'en');
+$('#capHi').setAttribute('aria-pressed', state.capLang === 'hi');
+
 $('#voiceBtn').onclick = () => {
   state.voice = !state.voice;
   $('#voiceBtn').setAttribute('aria-pressed', state.voice);
@@ -471,7 +556,7 @@ $('#callStaff').onclick = () => {
   b.classList.add('sent');
   $('#callLabel').textContent = v.id === 'flight' ? 'Crew notified' : 'Staff notified';
   toast(`${ICON.check}<span>${v.callToast}</span>`);
-  addMsg('bot', v.callReply.text, { gloss: v.callReply.gloss });
+  addMsg('bot', v.callReply.text, { gloss: glossOf(v.callReply) });
   perform(v.callReply);
   callTimer = setTimeout(resetCallButton, 30000);
 };
@@ -489,6 +574,17 @@ $('#useAI').onchange = (e) => (state.useAI = e.target.checked);
 $('#sayUser').checked = state.sayUser;
 $('#sayUser').onchange = (e) => (state.sayUser = e.target.checked);
 $('#venueSel').onchange = (e) => setVenue(e.target.value);
+// ASL by default; Indian Sign Language is a pilot (?sign=isl selects it for a kiosk)
+setSignLanguage(params.get('sign') || store.get('signLang') || 'asl');
+$('#signLang').value = signLanguage();
+$('#signLang').onchange = (e) => {
+  setSignLanguage(e.target.value);
+  store.set('signLang', signLanguage());
+  showSignLanguage();
+};
+function showSignLanguage() {
+  $('[data-status="1"]').textContent = signLanguage() === 'isl' ? 'Indian Sign Language (pilot) · ASL words marked' : V().status[1];
+}
 $('#venueSel').disabled = !!lockedVenue;
 $('#reduceMotion').checked = store.get('reduceMotion') === '1';
 document.documentElement.classList.toggle('reduce-motion', $('#reduceMotion').checked);
@@ -684,6 +780,7 @@ function applyVenueText() {
   $('#callStaff').title = v.id === 'flight' ? 'Call a cabin crew member to this seat' : 'Call a staff member to the front desk';
   document.querySelectorAll('.mode-switch button').forEach((b) => (b.querySelector('span').textContent = v.tabs[b.dataset.mode]));
   document.querySelectorAll('[data-status]').forEach((el) => (el.textContent = v.status[el.dataset.status]));
+  showSignLanguage();
   $('#welcomeTitle').textContent = v.welcome.title;
   $('#welcomeLead').innerHTML = v.welcome.lead;
   $('#welcomeFoot').textContent = v.welcome.foot;
@@ -725,7 +822,7 @@ function resetConversation() {
 }
 function greet() {
   const g = V().greeting;
-  addMsg('bot', g.text, { gloss: g.gloss });
+  addMsg('bot', g.text, { gloss: glossOf(g) });
   perform(g);
 }
 function begin() {

@@ -155,6 +155,21 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, { text: (raw || '').trim().replace(/^"|"$/g, '') });
     }
 
+    // Hindi captions: translate one of Meera's English replies
+    if (url.pathname === '/api/hindi' && req.method === 'POST') {
+      if (!client) return send(res, 503, { error: 'AI not configured' });
+      const { text = '', speaker = 'meera' } = await body(req);
+      const who = speaker === 'guest'
+        ? 'The text is what a guest said; keep their meaning, gender-neutral where possible.'
+        : 'The speaker is Meera, a woman: always use feminine first-person forms (करती हूँ, सकती हूँ, करूँगी).';
+      const raw = await claude(
+        `Translate the English text into simple, natural Hindi in Devanagari script, as spoken politely to a guest. ${who} Translate "Deaf" as "बधिर" and "hard of hearing" as "कम सुनने वाले" (never "सुनने वाले", which means hearing people). Keep names, booking IDs, room numbers, codes, Wi-Fi passwords, website addresses, amounts and times exactly as they are. Output only the Hindi translation.`,
+        [{ role: 'user', content: String(text).slice(0, 3000) }],
+        2048
+      );
+      return send(res, 200, { text: (raw || '').trim() });
+    }
+
     // static files
     let p = normalize(decodeURIComponent(url.pathname)).replace(/^([/\\])+/, '');
     if (!p || p.endsWith('/') || p.endsWith('\\')) p += 'index.html';
