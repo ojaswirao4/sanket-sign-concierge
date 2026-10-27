@@ -144,9 +144,26 @@ tools/avatar/          render and measurement tools for the avatars
 
 Add a new sign: add an entry to `SIGNS` in `signs.js` (keyframes of palm position, finger direction, palm direction and handshape) and add its name to `AUTHORED` in `server.js`. Dataset signs are added to Claude's vocabulary automatically.
 
+## Indian Sign Language (pilot)
+
+Settings → **Sign language** switches Meera to Indian Sign Language (or open the app with `?sign=isl`). The signs come from [INCLUDE](https://zenodo.org/records/4010759) (CC BY 4.0, 262 everyday words: greetings, family, colours, days, places, jobs). A word without an Indian sign is signed in ASL and marked **ASL** in the sign strip, and fingerspelling still uses the one-handed ASL alphabet.
+
+INCLUDE is 56.8 GB of zips, but Zenodo serves byte ranges, so `tools/include/fetch.py` reads each zip's table of contents over HTTP and downloads only 2 videos per word (~7 GB). The same `extract.py` converts them:
+
+```bash
+cd tools/include
+..\wlasl\.venv\Scripts\python fetch.py list          # data/catalog.json (word -> videos)
+..\wlasl\.venv\Scripts\python fetch.py get --per 2   # data/videos + data/manifest.json
+cd ..\wlasl
+.venv\Scripts\python extract.py --set isl                # -> public/signs/isl/
+set SET=isl&& node preview.mjs HELLO STUDENT && .venv\Scripts\python sheet.py   # comparison sheets in preview/isl
+```
+
+The INCLUDE signers stand further from the camera than WLASL's, so fine handshapes are tracked from fewer pixels and are less exact. Have an ISL signer review the signs before relying on them.
+
 ## Honest limitations
 
-- **Sign language:** Meera signs approximations of **ASL**. Guests in India mostly use Indian Sign Language (ISL), which differs. **Validate with Deaf signers before real use**; switching to ISL means new source videos (e.g. INCLUDE) through the same pipeline.
+- **Sign language:** Meera signs approximations of **ASL**. Guests in India mostly use Indian Sign Language (ISL), which differs. **Validate with Deaf signers before real use**; an Indian Sign Language pilot (262 INCLUDE words, ASL for the rest) is in Settings.
 - **Dataset signs** come from one video per word, so they carry that signer's style; depth is estimated from a single camera.
 - **Recognition** is rule-based: about 30 word signs plus static fingerspelling and digits. It works best with good lighting, one signer and a plain background. J/Z and most motion-heavy signs aren't recognized.
 - **Meera** is a stylised avatar built from code, not a scanned human. Her face and hands are designed for legibility rather than photorealism.

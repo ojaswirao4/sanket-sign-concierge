@@ -315,7 +315,7 @@ const DATASET_URL = 'signs/wlasl/';
 const DATASET = {}; // token -> frames
 let datasetIndex = new Set();
 let datasetPhrases = []; // [regex, token] for multi-word signs like WAKE-UP, HEART-ATTACK
-export const datasetReady = fetch(DATASET_URL + 'index.json')
+const aslReady = fetch(DATASET_URL + 'index.json')
   .then((r) => (r.ok ? r.json() : []))
   .then((list) => {
     datasetIndex = new Set(list);
@@ -327,7 +327,41 @@ export const datasetReady = fetch(DATASET_URL + 'index.json')
   })
   .catch(() => datasetIndex);
 
-export const hasSign = (tok) => !!SIGNS[tok] || datasetIndex.has(tok);
+
+// ---------- Indian Sign Language (pilot) ----------
+// Signs converted from the INCLUDE dataset (CC BY 4.0) by tools/include/fetch.py + tools/wlasl/extract.py --set isl.
+// It has ~260 everyday words, so in ISL mode a word without an Indian sign falls back to its American
+// sign, and signSource() tells the caption which language each sign is in.
+const ISL_URL = 'signs/isl/';
+// INCLUDE folder names that cover several glosses (or a gloss spelled differently)
+const ISL_ALIAS = {
+  'BIG-LARGE': ['BIG', 'LARGE'], 'SMALL-LITTLE': ['SMALL', 'LITTLE'], 'STORE-OR-SHOP': ['STORE', 'SHOP'], 'STREET-OR-ROAD': ['STREET', 'ROAD'],
+  I: ['ME', 'I'], 'CELL-PHONE': ['CELL-PHONE', 'PHONE'], COLOUR: ['COLOUR', 'COLOR'], GREY: ['GREY', 'GRAY'], NEIGHBOUR: ['NEIGHBOUR', 'NEIGHBOR'],
+  PANT: ['PANT', 'PANTS'], 'T-SHIRT': ['T-SHIRT', 'TSHIRT'], 'EX-MONSOON': [],
+};
+const INDIAN_AUTHORED = new Set(['NAMASTE']); // hand-authored signs that are Indian, not ASL
+const ISL = {}; // token -> frames
+const islFile = new Map(); // token -> file name
+let islPhrases = [];
+let signLang = 'asl';
+export const setSignLanguage = (lang) => (signLang = lang === 'isl' ? 'isl' : 'asl');
+export const signLanguage = () => signLang;
+const islReady = fetch(ISL_URL + 'index.json')
+  .then((r) => (r.ok ? r.json() : []))
+  .then((list) => {
+    for (const f of list) for (const t of ISL_ALIAS[f] || [f]) islFile.set(t, f);
+    islPhrases = [...islFile.keys()]
+      .filter((t) => t.includes('-'))
+      .sort((a, b) => b.length - a.length)
+      .map((t) => [new RegExp(`\\b${t.toLowerCase().split('-').join('\\s+')}\\b`, 'g'), t]);
+  })
+  .catch(() => {});
+export const datasetReady = Promise.all([aslReady, islReady]).then(() => datasetIndex);
+const useISL = (tok) => signLang === 'isl' && islFile.has(tok);
+// 'isl' or 'asl': the language a token is signed in right now (fingerspelling is the ASL alphabet)
+export const signSource = (tok) => (useISL(tok) || INDIAN_AUTHORED.has(tok) ? 'isl' : 'asl');
+
+export const hasSign = (tok) => !!SIGNS[tok] || datasetIndex.has(tok) || useISL(tok);
 
 // Video tracking sometimes misreads a hand for a single keyframe (~60 ms): a finger jumps half-bent and
 // back, or the palm flips around and back. Those one-keyframe spikes play as flutter / flips, so they are
@@ -364,15 +398,23 @@ export function despike(frames) {
 // Fetch the dataset signs a gloss needs before playing it.
 export async function loadSigns(tokens) {
   await datasetReady;
-  const need = [...new Set(tokens)].filter((t) => !SIGNS[t] && datasetIndex.has(t) && !DATASET[t]);
-  await Promise.all(
-    need.map((t) =>
+  const uniq = [...new Set(tokens)];
+  const need = uniq.filter((t) => !useISL(t) && !SIGNS[t] && datasetIndex.has(t) && !DATASET[t]);
+  const needISL = uniq.filter((t) => useISL(t) && !ISL[t]);
+  await Promise.all([
+    ...need.map((t) =>
       fetch(DATASET_URL + encodeURIComponent(t) + '.json')
         .then((r) => r.json())
         .then((d) => (DATASET[t] = despike(d.frames)))
         .catch(() => datasetIndex.delete(t))
-    )
-  );
+    ),
+    ...needISL.map((t) =>
+      fetch(ISL_URL + encodeURIComponent(islFile.get(t)) + '.json')
+        .then((r) => r.json())
+        .then((d) => (ISL[t] = despike(d.frames)))
+        .catch(() => islFile.delete(t))
+    ),
+  ]);
 }
 
 // ---------- Fingerspelling & numbers ----------
@@ -408,7 +450,7 @@ export function fingerspellFrames(word, gi) {
 export function buildFrames(tokens) {
   const frames = [];
   tokens.forEach((tok, gi) => {
-    const sign = SIGNS[tok] || DATASET[tok];
+    const sign = (useISL(tok) && ISL[tok]) || SIGNS[tok] || DATASET[tok];
     if (sign) {
       sign.forEach((f) => frames.push({ ...f, gi }));
     } else if (/^\d+$/.test(tok)) {
@@ -439,6 +481,10 @@ const PHRASES = [
   [/\bwould like\b/g, ' WANT '],
   [/\bfront desk\b|\breception\b/g, ' HOTEL '],
   [/\broom service\b/g, ' ROOM GIVE '],
+  // welfare-schemes vocabulary
+  [/\bscholarships?\b/g, ' SCHOOL MONEY '],
+  [/\bunemploy(ed|ment)\b/g, ' NOT WORK '],
+  [/\bhearing aids?\b/g, ' HEARING-AID '],
 ];
 const SYN = {
   hi: 'HELLO', hello: 'HELLO', hey: 'HELLO', welcome: 'WELCOME', bye: 'BYE', goodbye: 'BYE',
@@ -452,7 +498,7 @@ const SYN = {
   tomorrow: 'TOMORROW', yesterday: 'YESTERDAY', time: 'TIME', hour: 'TIME', hours: 'TIME', minutes: 'TIME', clock: 'TIME',
   when: 'WHEN', where: 'WHERE', what: 'WHAT', which: 'WHAT', how: 'HOW', why: 'WHY',
   eat: 'EAT', food: 'EAT', meal: 'EAT', meals: 'EAT', restaurant: 'EAT', menu: 'EAT', drink: 'DRINK', drinks: 'DRINK', coffee: 'DRINK', tea: 'DRINK', bar: 'DRINK', water: 'WATER',
-  key: 'KEY', keycard: 'KEY', card: 'KEY', money: 'MONEY', price: 'MONEY', prices: 'MONEY', cost: 'MONEY', costs: 'MONEY', rate: 'MONEY', rates: 'MONEY', charge: 'MONEY', fee: 'MONEY', bill: 'MONEY', invoice: 'MONEY', rupees: 'MONEY',
+  key: 'KEY', keycard: 'KEY', money: 'MONEY', price: 'MONEY', prices: 'MONEY', cost: 'MONEY', costs: 'MONEY', rate: 'MONEY', rates: 'MONEY', charge: 'MONEY', fee: 'MONEY', bill: 'MONEY', invoice: 'MONEY', rupees: 'MONEY',
   pay: 'PAY', payment: 'PAY', paid: 'PAY', free: 'FREE', complimentary: 'FREE', included: 'FREE',
   sleep: 'SLEEP', bed: 'SLEEP', beds: 'SLEEP', pillow: 'SLEEP', pillows: 'SLEEP',
   bathroom: 'BATHROOM', toilet: 'BATHROOM', restroom: 'BATHROOM', washroom: 'BATHROOM',
@@ -471,6 +517,21 @@ const SYN = {
   doctor: 'DOCTOR', medical: 'DOCTOR', hospital: 'DOCTOR', clinic: 'DOCTOR', pharmacy: 'DOCTOR', medicine: 'DOCTOR',
   emergency: 'EMERGENCY', fire: 'EMERGENCY', urgent: 'EMERGENCY', late: 'LATE',
   elevator: 'ELEVATOR', lift: 'ELEVATOR', hotel: 'HOTEL', parking: 'PARKING', park: 'PARKING',
+  // welfare schemes: long official words -> the nearest dataset sign, so replies are signed rather than spelled out
+  disability: 'DEAF', disabilities: 'DEAF', disabled: 'DEAF', handicapped: 'DEAF', impaired: 'DEAF', deafness: 'DEAF',
+  certificate: 'DOCUMENT', certificates: 'DOCUMENT', application: 'FORM', apply: 'REQUEST', applies: 'REQUEST', applied: 'REQUEST',
+  portal: 'INTERNET', online: 'INTERNET', website: 'INTERNET', site: 'INTERNET', app: 'INTERNET', download: 'INTERNET',
+  income: 'EARN', salary: 'EARN', earning: 'EARN', earnings: 'EARN', pension: 'MONEY', allowance: 'MONEY', amount: 'MONEY',
+  reimbursement: 'PAY', reimbursed: 'PAY', concession: 'DISCOUNT', concessional: 'DISCOUNT', subsidy: 'DISCOUNT',
+  national: 'INDIA', indian: 'INDIA', citizen: 'PEOPLE', citizens: 'PEOPLE', anyone: 'ANY', older: 'OLD', loss: 'LOSE',
+  district: 'LOCAL', department: 'GOVERNMENT', ministry: 'GOVERNMENT', central: 'GOVERNMENT', welfare: 'HELP', scheme: 'PROGRAM', schemes: 'PROGRAM',
+  yearly: 'YEAR', annual: 'YEAR', annually: 'YEAR', course: 'CLASS', courses: 'CLASS', coaching: 'TEACH', training: 'TEACH',
+  exam: 'TEST', exams: 'TEST', assessment: 'TEST', education: 'SCHOOL', institute: 'SCHOOL', institutes: 'SCHOOL',
+  job: 'WORK', jobs: 'WORK', employment: 'WORK', recruitment: 'WORK', usually: 'OFTEN', severe: 'SERIOUS', profound: 'SERIOUS',
+  overseas: 'INTERNATIONAL', abroad: 'INTERNATIONAL', details: 'INFORM', admission: 'ENTER', rehabilitation: 'THERAPY',
+  official: 'GOVERNMENT', officially: 'GOVERNMENT', link: 'INTERNET', links: 'INTERNET', confirm: 'CHECK', fare: 'MONEY', fares: 'MONEY',
+  travelling: 'TRAVEL', traveling: 'TRAVEL', percentage: 'PERCENT', device: 'MACHINE', devices: 'MACHINE', came: 'COME', attend: 'GO', receive: 'GET', received: 'GET',
+  licence: 'CARD', license: 'CARD', seat: 'CHAIR', seats: 'CHAIR', agency: 'OFFICE', loan: 'BORROW', loans: 'BORROW',
 };
 // Not signed (ASL drops articles, "be" verbs and most prepositions, which are shown by placement).
 const STOP = new Set(
@@ -501,31 +562,40 @@ const NUMWORDS = {
   first: '1', second: '2', third: '3', fourth: '4', fifth: '5', sixth: '6', seventh: '7', eighth: '8', ninth: '9', tenth: '10', ground: '0',
 };
 
-export function textToGloss(text, max = 16) {
+export function textToGloss(text, max = 80) {
   let s = ' ' + String(text || '').toLowerCase() + ' ';
   PHRASES.forEach(([re, rep]) => (s = s.replace(re, rep)));
+  if (signLang === 'isl') islPhrases.forEach(([re, tok]) => (s = s.replace(re, ` ${tok} `)));
   datasetPhrases.forEach(([re, tok]) => (s = s.replace(re, ` ${tok} `)));
   const originalWords = String(text || '').split(/\s+/);
-  const proper = new Set(originalWords.filter((w, i) => i > 0 && /^[A-Z][a-z]+/.test(w)).map((w) => w.toLowerCase().replace(/[^a-z]/g, '')));
+  // Capitalised mid-sentence words are names (spelled); the first word of each sentence is not.
+  const proper = new Set(
+    originalWords
+      .filter((w, i) => i > 0 && /^[A-Z][a-z]+/.test(w) && !/[.!?:;("“]$/.test(originalWords[i - 1]) && !/^\W*$/.test(originalWords[i - 1]))
+      .map((w) => w.toLowerCase().replace(/[^a-z]/g, ''))
+  );
   const out = [];
   s.split(/\s+/).forEach((raw) => {
     if (!raw) return;
     if (/^[A-Z'-]+$/.test(raw) || raw.startsWith('FS:')) return out.push(raw);
-    const w = raw.replace(/[^a-z0-9'₹:]/g, '');
+    const w = raw.replace(/[^a-z0-9'₹:]/g, '').replace(/:$/, '');
     if (!w) return;
     if (/^\d{1,2}:\d{2}$/.test(w)) return out.push(w.replace(':00', '').replace(':', ''));
     const digits = w.replace(/[^0-9]/g, '');
-    if (digits && digits.length === w.replace(/[₹,]/g, '').length) return out.push(digits.slice(0, 6));
+    if (digits && digits.length === w.replace(/[₹,]/g, '').length) return out.push(digits.slice(0, 6), ...(w.includes('₹') ? ['MONEY'] : []));
     if (/^\d+(st|nd|rd|th)$/.test(w)) return out.push(digits);
     if (/^\d+(am|pm)$/.test(w)) return out.push(w.replace(/\D/g, ''), 'FS:' + w.replace(/\d/g, '').toUpperCase());
-    if (w === 'am' || w === 'pm') return out.push('FS:' + w.toUpperCase());
+    if ((w === 'am' || w === 'pm') && /^\d+$/.test(out[out.length - 1])) return out.push('FS:' + w.toUpperCase());
     if (NUMWORDS[w]) return out.push(NUMWORDS[w]);
     if (STOP.has(w)) return;
+    // an Indian sign for the word itself beats an ASL stand-in from SYN (HOSPITAL, not DOCTOR)
+    const isl = signLang === 'isl' && /[a-z]/.test(w) && lemmas(w.replace(/[^a-z]/g, '')).map((l) => l.toUpperCase()).find(useISL);
+    if (isl) return out.push(isl);
     const base = SYN[w] || SYN[w.replace(/s$/, '')];
     if (base) return out.push(base);
     const word = w.replace(/'s$/, '').replace(/[^a-z]/g, '');
     if (!word) return;
-    if (proper.has(w) && word.length <= 8) return out.push('FS:' + word.toUpperCase());
+    if (proper.has(w) && word.length <= 8 && !hasSign(word.toUpperCase())) return out.push('FS:' + word.toUpperCase());
     // dataset sign for the word (or its base form)?
     const known = lemmas(word).map((l) => l.toUpperCase()).find(hasSign);
     if (known) return out.push(known);

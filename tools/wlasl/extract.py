@@ -13,6 +13,7 @@ Usage:
   python extract.py --list data/hotel_words.txt   # the words in that file (see select_words.py), resumable
   python extract.py --force         # redo all of them
   python extract.py book hello      # just these
+  python extract.py --set isl       # Indian Sign Language: ../include/data -> public/signs/isl (see ../include/fetch.py)
 
 Each keyframe also carries the signer's face: 'face': {'bs': {ARKit blendshape: 0..1}, 'head': [pitch, yaw, roll]},
 relative to their neutral face at rest.
@@ -30,6 +31,7 @@ from mediapipe.tasks.python import BaseOptions, vision
 HERE = Path(__file__).parent
 DATA = HERE / 'data'
 OUT = HERE.parent.parent / 'public' / 'signs' / 'wlasl'
+SETS = {'isl': (HERE.parent / 'include' / 'data', HERE.parent.parent / 'public' / 'signs' / 'isl')}
 MODEL = HERE / 'models' / 'holistic_landmarker.task'
 
 # --- avatar constants (keep in sync with public/js/avatar.js) ---
@@ -377,7 +379,7 @@ def quality(frames):
 
 
 def token(gloss):
-    return gloss.upper().replace(' ', '-')
+    return gloss.upper().replace(' ', '-').replace('_', '-')
 
 
 def has_face(path):
@@ -388,11 +390,14 @@ def has_face(path):
 
 
 def main():
-    manifest = json.loads((DATA / 'manifest.json').read_text())
+    global DATA, OUT
     argv = sys.argv[1:]
+    if '--set' in argv:
+        DATA, OUT = SETS[argv[argv.index('--set') + 1]]
+    manifest = json.loads((DATA / 'manifest.json').read_text())
     force = '--force' in argv
     word_list = argv[argv.index('--list') + 1] if '--list' in argv else None
-    args = [a for i, a in enumerate(argv) if not a.startswith('--') and not (i and argv[i - 1] == '--list')]
+    args = [a for i, a in enumerate(argv) if not a.startswith('--') and not (i and argv[i - 1] in ('--list', '--set'))]
     if word_list:
         want = [l.strip().lower() for l in Path(word_list).read_text(encoding='utf-8').splitlines() if l.strip()]
     else:
@@ -427,7 +432,7 @@ def main():
                 break  # clips are in preference order; skip the rest when this one tracked well
         if best:
             q, kf, v = best
-            doc = {'gloss': token(gloss), 'source': {'dataset': 'WLASL', 'video_id': v['video_id'], 'site': v['source'], 'url': v['url']},
+            doc = {'gloss': token(gloss), 'source': {'dataset': v.get('dataset', 'WLASL'), 'video_id': v['video_id'], 'site': v['source'], 'url': v['url']},
                    'quality': round(q, 2), 'faceData': any('face' in f for f in kf['frames']), **kf}
             (OUT / f'{token(gloss)}.json').write_text(json.dumps(doc, separators=(',', ':')))
             print(f'[{n}/{len(want)}] {gloss}: {len(kf["frames"])} keyframes, quality {q:.2f}, {"two" if kf["twoHanded"] else "one"}-handed', flush=True)

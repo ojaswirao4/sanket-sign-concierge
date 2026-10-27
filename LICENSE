@@ -32,6 +32,14 @@ public/signs/wlasl/
   USE. The source videos belong to their original publishers and are not
   included in this repository.
 
+public/signs/isl/
+  Indian Sign Language keyframes derived from the INCLUDE dataset (Sridhar et
+  al., "INCLUDE: A Large Scale Dataset for Indian Sign Language Recognition",
+  ACM Multimedia 2020, https://zenodo.org/records/4010759), licensed under
+  Creative Commons Attribution 4.0 (CC BY 4.0). Changed from the original:
+  body and hand poses were tracked from the videos and retargeted to the
+  avatar as keyframes. The source videos are not included in this repository.
+
 public/models/aria/
   "Business_Female_01" from the Microsoft Rocketbox avatar library
   (https://github.com/microsoft/Microsoft-Rocketbox), MIT licence. See

@@ -34,7 +34,7 @@ ws.onmessage = (e) => {
 };
 const send = (method, params = {}) => new Promise((r) => { const i = ++id; pending.set(i, r); ws.send(JSON.stringify({ id: i, method, params })); });
 const ev = async (expr) => {
-  const r = await send('Runtime.evaluate', { expression: `(async()=>{${expr}})()`, awaitPromise: true, returnByValue: true, timeout: 300000 });
+  const r = await send('Runtime.evaluate', { expression: `(async()=>{window.dispatchEvent(new Event('keydown'));${expr}})()`, awaitPromise: true, returnByValue: true, timeout: 300000 });
   if (r.result?.exceptionDetails) throw new Error(r.result.exceptionDetails.exception?.description || r.result.exceptionDetails.text);
   return r.result?.result?.value;
 };
@@ -355,11 +355,39 @@ await check('welfare: every sign in every reply can be performed', async () => {
     if (bad.length) throw new Error('unknown signs: ' + [...new Set(bad)].join(', '));
     return document.querySelectorAll('.msg.bot').length + ' replies checked';`);
 });
+await check('welfare: Meera signs the whole reply, not a short summary', async () => {
+  const body = await say('Is there a train ticket concession for deaf people?');
+  await sleep(1500);
+  const { n, want, sp } = await ev(`
+    const { textToGloss } = await import('/js/signs.js');
+    const t = [...document.querySelectorAll('#glossStrip .gtok')].map((e) => e.dataset.label || e.textContent);
+    return { n: t.length, want: textToGloss(${JSON.stringify(body)}, 999).length, sp: t.filter((x) => /^[A-Z](-[A-Z0-9])+$/.test(x)).length / t.length };`);
+  assert(n >= 30 && n === want, `${n} signs for a reply that needs ${want}`);
+  assert(sp < 0.4, Math.round(sp * 100) + '% of signs are fingerspelled');
+  return `${n} signs, ${Math.round(sp * 100)}% fingerspelled`;
+});
 await check('switching back to the hotel restores it', async () => {
   await ev(`aria.setVenue('hotel')`);
   const s = await ev(`return {strip: document.querySelector('#flightStrip').hidden, tile: document.querySelector('.tile').textContent.trim(), greet: document.querySelector('.msg.bot .body').textContent}`);
   assert(s.strip && s.tile === 'Check-in' && /Kesar Palace/.test(s.greet), JSON.stringify(s));
   return s.tile;
+});
+await check('Indian Sign Language: Indian signs first, ASL fallback marked, then back to ASL', async () => {
+  const r = await ev(`
+    const sel = document.querySelector('#signLang');
+    sel.value = 'isl'; sel.dispatchEvent(new Event('change'));
+    const { textToGloss, signSource } = await import('/js/signs.js');
+    const text = 'Hello! Good morning, thank you. The hospital is near the station.';
+    const g = textToGloss(text);
+    aria.perform({ text });
+    await new Promise((r) => setTimeout(r, 600));
+    const marked = [...document.querySelectorAll('#glossStrip .gtok.asl')].map((t) => t.dataset.label);
+    const out = { isl: g.filter((t) => signSource(t) === 'isl'), marked, status: document.querySelector('[data-status="1"]').textContent };
+    sel.value = 'asl'; sel.dispatchEvent(new Event('change'));
+    out.back = document.querySelector('[data-status="1"]').textContent;
+    return out;`);
+  assert(['HELLO', 'GOOD-MORNING', 'HOSPITAL'].every((t) => r.isl.includes(t)) && r.marked.length && /Indian/.test(r.status) && /American/.test(r.back), JSON.stringify(r));
+  return `Indian: ${r.isl.join(' ')}; ASL marked: ${r.marked.join(' ')}`;
 });
 
 await sleep(2500);

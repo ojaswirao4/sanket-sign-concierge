@@ -1,15 +1,18 @@
 """Side-by-side sheets: source video frame (top) vs Aria (bottom) at the same keyframes.
-Run after preview.mjs. Writes preview/sheet_<GLOSS>.png and preview/sheet_all.png."""
+Run after preview.mjs (same SET=isl for Indian signs). Writes preview/sheet_<GLOSS>.png and preview/sheet_all.png."""
 import json
+import os
 from pathlib import Path
 
 import cv2
 import numpy as np
 
 HERE = Path(__file__).parent
-PREV = HERE / 'preview'
-SIGNS = HERE.parent.parent / 'public' / 'signs' / 'wlasl'
-manifest = json.loads((HERE / 'data' / 'manifest.json').read_text())
+SET = os.environ.get('SET', 'wlasl')
+PREV = HERE / 'preview' if SET == 'wlasl' else HERE / 'preview' / SET
+SIGNS = HERE.parent.parent / 'public' / 'signs' / SET
+DATA = HERE / 'data' if SET == 'wlasl' else HERE.parent / 'include' / 'data'
+manifest = json.loads((DATA / 'manifest.json').read_text())
 picks = json.loads((PREV / 'picks.json').read_text())
 H = 220
 
@@ -28,9 +31,9 @@ def video_frame(path, n):
 rows = []
 for gloss, ks in picks.items():
     doc = json.loads((SIGNS / f'{gloss}.json').read_text())
-    key = gloss.lower().replace('-', ' ')
+    key = gloss.lower().replace('-', ' ' if SET == 'wlasl' else '_')
     v = next(v for v in manifest[key] if v['video_id'] == doc['source']['video_id'])
-    top = [fit(video_frame(HERE / 'data' / v['file'], p['vf'])) for p in ks]
+    top = [fit(video_frame(DATA / v['file'], p['vf'])) for p in ks]
     bot = [fit(cv2.imread(str(PREV / f"{gloss}_{p['k']}.png"))) for p in ks]
     cols = []
     for t, b in zip(top, bot):

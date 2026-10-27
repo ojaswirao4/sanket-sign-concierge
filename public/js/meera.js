@@ -427,6 +427,31 @@ function armFrame(origin, boneDir, reachDir, pole) {
   const z = new THREE.Vector3().crossVectors(x, y);
   return new THREE.Matrix4().makeBasis(x, y, z).setPosition(origin);
 }
+// Forearm rotation (radians) the hand asks for: 0 = thumb up with the palm facing the midline when the
+// elbow is bent, + = turned palm-up (supination), - = turned palm-down (pronation). A real forearm only
+// turns ~90 degrees each way. side: 1 = her right arm, -1 = her left. Also returns how bent the elbow is
+// (sine of the angle): with a straight arm the shoulder can take over the turn, so the limit fades out.
+const _tq = new THREE.Quaternion(), _tv = new THREE.Vector3(), _tn = new THREE.Vector3(), _tc = new THREE.Vector3();
+function forearmTwist(upperDir, foreDir, handY, handN, side) {
+  _tv.crossVectors(upperDir, foreDir);
+  const bend = _tv.length();
+  const n0 = _tv.multiplyScalar(-side / (bend || 1)); // neutral palm direction: toward the midline
+  _tn.copy(handN).applyQuaternion(_tq.setFromUnitVectors(handY, foreDir)); // wrist bend removed
+  _tn.addScaledVector(foreDir, -_tn.dot(foreDir));
+  return { twist: Math.atan2(side * _tc.crossVectors(n0, _tn).dot(foreDir), n0.dot(_tn)), bend };
+}
+// The turn a real forearm makes for a requested turn t: t itself within the limits (~85 degrees palm-up,
+// ~92 palm-down), the nearest limit a little past them, and beyond ~130 degrees it eases back toward
+// neutral: a palm reversed ~180 degrees is a tracking misread (palm side and back of the hand swapped),
+// whose intended pose is the neutral one. Continuous all the way round, so a hand never snaps.
+const SUPINATE = 1.5, PRONATE = -1.6, FOLD = 2.27;
+const BEND_SOFT = 1.13, BEND_MAX = 1.48; // wrist bend: kept as recorded up to 65 degrees, never past 85
+function feasibleTwist(t) {
+  if (t > FOLD) return (SUPINATE * (Math.PI - t)) / (Math.PI - FOLD);
+  if (t < -FOLD) return (PRONATE * (Math.PI + t)) / (Math.PI - FOLD);
+  return clamp(t, PRONATE, SUPINATE);
+}
+
 function armBindFrames(side) {
   const { S, d, pole } = ARM_BIND[side];
   const E = S.clone().addScaledVector(d, UPPER);
@@ -1400,6 +1425,10 @@ export class MeeraAvatar extends Avatar {
       const dev = Math.asin(clamp(Math.abs(f.dot(side)), 0, 1));
       const flex = Math.acos(clamp(f.dot(handY), -1, 1));
       let cost = flex * 0.6 + Math.max(0, dev - 0.35) * 4 + dev * 0.5 + 0.35 * Math.abs(phi);
+      // and the forearm turn it would need: lifting or tucking the elbow (turning the upper arm) is how a
+      // person reaches a palm orientation the forearm alone cannot turn to
+      const tw = forearmTwist(E.clone().sub(S).normalize(), f, handY, handN, -sgn);
+      cost += Math.min(1, Math.abs(tw.twist - feasibleTwist(tw.twist))) * 0.5 * smooth(0.2, 0.5, tw.bend);
       if (E.y > S.y - 0.04) cost += (E.y - S.y + 0.04) * 20; // elbows stay below the shoulders
       if (E.x * sgn < 0.08) cost += (0.08 - E.x * sgn) * 20; // and out to the side, not in front of the body
       if (E.z < -0.06) cost += (-0.06 - E.z) * 20; // and not pulled far behind her
@@ -1419,6 +1448,28 @@ export class MeeraAvatar extends Avatar {
       best = { E, f: Wc.clone().sub(E).normalize(), nrm };
       arm.E = E.clone();
       arm.lastW = Wc.clone();
+    }
+    // Video tracking sometimes asks for a palm turned further than a forearm can rotate (e.g. thumb down
+    // and palm out, ~170 degrees from neutral: the hand looked screwed on backwards). Turn the hand about
+    // the forearm to what a real arm does (feasibleTwist); the finger direction and position are unchanged.
+    // The correction glides (<= ~12 degrees a frame) so it never snaps.
+    const tw = forearmTwist(best.E.clone().sub(S).normalize(), best.f, handY, handN, -sgn);
+    let target = (tw.twist - feasibleTwist(tw.twist)) * smooth(0.2, 0.5, tw.bend) * sgn; // turn by (feasible - t) * side
+    if (animating && arm.corr !== undefined) {
+      if (arm.corrTick !== this._tick) (arm.corrBase = arm.corr), (arm.corrTick = this._tick);
+      target += Math.round((arm.corrBase - target) / (2 * Math.PI)) * 2 * Math.PI; // +-180 degrees is the same turn
+      arm.corr = arm.corrBase + clamp(target - arm.corrBase, -0.2, 0.2);
+    } else arm.corr = target;
+    if (arm.corr) quat = new THREE.Quaternion().setFromAxisAngle(best.f, arm.corr).multiply(quat);
+    // Likewise the wrist bend: some keyframes fold the hand back 90-170 degrees against the forearm.
+    // Bends up to 65 degrees are kept as recorded; past that the hand eases toward the forearm and never
+    // passes 85 degrees (a real wrist's range). Smooth in the requested bend, so nothing snaps.
+    const Yc = UPV.clone().applyQuaternion(quat), bendAng = Math.acos(clamp(Yc.dot(best.f), -1, 1));
+    if (bendAng > BEND_SOFT) {
+      const shown = BEND_SOFT + (BEND_MAX - BEND_SOFT) * (1 - Math.exp(-(bendAng - BEND_SOFT) / (BEND_MAX - BEND_SOFT)));
+      const ax = new THREE.Vector3().crossVectors(Yc, best.f);
+      if (ax.lengthSq() < 1e-8) ax.crossVectors(Yc, Math.abs(Yc.x) < 0.9 ? new THREE.Vector3(1, 0, 0) : UPV);
+      quat = new THREE.Quaternion().setFromAxisAngle(ax.normalize(), bendAng - shown).multiply(quat);
     }
     arm.upper.position.copy(S);
     arm.upper.quaternion.setFromUnitVectors(UPV, best.E.clone().sub(S).normalize());

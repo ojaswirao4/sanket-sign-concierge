@@ -1,5 +1,5 @@
 // Render Aria at chosen keyframes of dataset signs (headless Chrome over CDP).
-// Usage: node preview.mjs [GLOSS ...]    (server must be running on :5173)
+// Usage: node preview.mjs [GLOSS ...]    (server must be running on :5173; SET=isl for Indian signs)
 // Writes preview/<GLOSS>_<k>.png; then run `python sheet.py` to build comparison sheets.
 import { spawn } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync, readdirSync } from 'node:fs';
@@ -7,8 +7,9 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const SIGNS = join(HERE, '..', '..', 'public', 'signs', 'wlasl');
-const OUT = join(HERE, 'preview');
+const SET = process.env.SET || 'wlasl';
+const SIGNS = join(HERE, '..', '..', 'public', 'signs', SET);
+const OUT = SET === 'wlasl' ? join(HERE, 'preview') : join(HERE, 'preview', SET);
 mkdirSync(OUT, { recursive: true });
 const PICK = 4; // keyframes per sign
 const glosses = process.argv.slice(2).length ? process.argv.slice(2) : JSON.parse(readFileSync(join(SIGNS, 'index.json'), 'utf8'));
@@ -36,7 +37,7 @@ await send('Page.enable');
 await send('Page.navigate', { url: 'http://localhost:5173/' });
 await sleep(4000);
 // freeze Aria: stop idle playback so poses are exact
-await ev(`(()=>{const a=aria.avatar;a.queue=[];a.frame=null;a.speed=0;return true})()`);
+await ev(`(()=>{document.getElementById('welcome')?.remove();const a=aria.avatar;a.queue=[];a.frame=null;a.speed=0;return true})()`);
 const rect = await ev(`(()=>{const r=document.querySelector('#avatar').getBoundingClientRect();return {x:r.x,y:r.y,w:r.width,h:r.height}})()`);
 // crop to the upper body
 const clip = { x: rect.x + rect.w * 0.15, y: rect.y + rect.h * 0.08, width: rect.w * 0.7, height: rect.h * 0.8, scale: 0.6 };

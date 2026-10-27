@@ -596,8 +596,8 @@ export class Avatar {
     key.position.set(-1.4, 2.6, 2.2);
     key.castShadow = true;
     key.shadow.mapSize.set(2048, 2048);
-    key.shadow.camera.left = -1;
-    key.shadow.camera.right = 1;
+    key.shadow.camera.left = -1.5;
+    key.shadow.camera.right = 1.5;
     key.shadow.camera.top = 2;
     key.shadow.camera.bottom = 0.5;
     key.shadow.bias = -0.0004;
@@ -623,18 +623,18 @@ export class Avatar {
     const hotelProps = new THREE.Group();
     scene.add(hotelProps);
     const gold = new THREE.MeshStandardMaterial({ color: '#d4ae62', metalness: 1, roughness: 0.28 });
-    const top = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.05, 0.62), wood);
+    const top = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.05, 0.62), wood);
     top.position.set(0, 0.955, 0.43);
     top.receiveShadow = true;
     scene.add(top);
-    const trim = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.012, 0.012), gold);
+    const trim = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.012, 0.012), gold);
     trim.position.set(0, 0.93, 0.745);
     scene.add(trim);
-    const front = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.6, 0.04), wood);
+    const front = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.6, 0.04), wood);
     front.position.set(0, 0.63, 0.72);
     scene.add(front);
     // brass inlay along the desk front
-    const inlay = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.006, 0.004), gold);
+    const inlay = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.006, 0.004), gold);
     inlay.position.set(0, 0.86, 0.742);
     scene.add(inlay);
     // brass service bell (her left, the viewer's right)
@@ -737,16 +737,23 @@ export class Avatar {
       r.setSize(w, hgt, false);
       const aspect = w / hgt;
       this.camera.aspect = aspect;
-      // frame head + signing space in the upper ~70% of the view (captions sit below)
-      const needH = 1.2, needW = 0.95;
-      const fov = THREE.MathUtils.degToRad(this.camera.fov);
-      const distH = needH / 2 / Math.tan(fov / 2);
-      const distW = needW / 2 / (Math.tan(fov / 2) * aspect);
+      // frame her head down to the desk top in the part of the view above the overlaid captions,
+      // so the desk always shows between her hands and the caption box
+      const caption = this.container.parentElement?.querySelector('.caption');
+      const reserve = caption && getComputedStyle(caption).position === 'absolute' ? 215 : 0; // caption + pager + controls
+      const clear = Math.max(0.5, (hgt - reserve) / hgt);
+      const top = 1.98, bottom = 0.84, needW = 0.95;
+      const tan = Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2);
+      const distH = (top - bottom) / clear / 2 / tan;
+      const distW = needW / 2 / (tan * aspect);
       const d = Math.max(distH, distW);
-      const cy = 1.93 - d * Math.tan(fov / 2); // keep the top of the frame just above her head
+      const cy = top - d * tan; // keep the top of the frame just above her head
       this.camera.position.set(0, cy + 0.05, 0.12 + d);
       this.camera.lookAt(0, cy, 0.12);
       this.camera.updateProjectionMatrix();
+      // the backdrop keeps the same soft haze however far back the camera sits
+      scene.fog.near = d + 1.4;
+      scene.fog.far = d + 6.4;
     };
     new ResizeObserver(this.resize).observe(this.container);
     this.resize();

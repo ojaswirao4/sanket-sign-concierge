@@ -147,6 +147,8 @@ export const VENUES = {
   schemes: {
     id: 'schemes',
     label: 'Welfare schemes',
+    // Deaf visitors rely on the signing, so every reply is signed in full (from its text), not as a short summary.
+    fullSigning: true,
     place: 'Sanket Seva · Welfare help desk',
     brandSub: 'Sign Language Guide · Government welfare schemes',
     role: 'Scheme Guide',

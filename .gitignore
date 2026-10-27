@@ -12,6 +12,7 @@ __pycache__/
 tools/wlasl/data/
 tools/wlasl/models/
 tools/wlasl/preview/
+tools/include/data/
 
 # avatar tooling: source FBX + textures, converter binary, build output and renders
 tools/avatar/src/
